@@ -46,7 +46,7 @@ if (!isTouch) {
 const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
-  let W, H, dpr, P = [], F = [], M = 0, DANCE = 0, SPIN = 0, rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
+  let W, H, dpr, P = [], F = [], M = 0, exits = [], rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
   const mouse = { x: -1e4, y: -1e4 }
 
   function build() {
@@ -140,11 +140,6 @@ const hero = (() => {
       const m = M <= 0 ? 0 : easeIO(Math.max(0, Math.min(1, M * 1.6 - p.d * 0.6)))
       const ch = Math.sin(Math.PI * m) * p.cr, ang = p.ca + m * 5 + time * 0.8
       let bx = p.tx + (p.xx - p.tx) * m + Math.cos(ang) * ch, by = p.ty + (p.xy - p.ty) * m + Math.sin(ang) * ch * 0.8
-      if (DANCE > 0 && m > 0) {   // little dance of the X: sway, hop, pulse and one full spin
-        const k = DANCE * m, dxx = bx - W / 2, dyy = by - H * 0.45, ang = (0.2 * Math.sin(time * 5) + SPIN) * k, sc = 1 + 0.07 * Math.sin(time * 10) * k
-        bx = W / 2 + (dxx * Math.cos(ang) - dyy * Math.sin(ang)) * sc
-        by = H * 0.45 + (dxx * Math.sin(ang) + dyy * Math.cos(ang)) * sc - Math.abs(Math.sin(time * 5)) * 26 * k
-      }
       const x0 = cx + a * (bx - cx) + b * p.ex + fx, y0 = cy + a * (by - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
@@ -153,6 +148,29 @@ const hero = (() => {
       ctx.fillStyle = p.acc ? ACC : `rgba(241,239,233,${0.5 + 0.5 * ab})`
       ctx.fillRect(x0 + p.ox, y0 + p.oy, r, r)
     }
+    // drones leaving after the catch: spin up, then warp out with a streak and pop
+    exits = exits.filter(e => {
+      e.t += dt
+      if (e.t < 0.5) { e.spin += dt * (6 + e.t * 50); e.y -= dt * 20 }
+      else if (!e.done) {
+        const dir = e.ang + e.spin, a2 = 2600
+        e.vx += Math.cos(dir) * a2 * dt; e.vy += Math.sin(dir) * a2 * dt; e.x += e.vx * dt; e.y += e.vy * dt
+        const sp = Math.hypot(e.vx, e.vy)
+        ctx.strokeStyle = 'rgba(241,239,233,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x - e.vx / sp * Math.min(160, sp * 0.12), e.y - e.vy / sp * Math.min(160, sp * 0.12)); ctx.stroke()
+        if (e.t > 0.85 || e.x < -40 || e.x > W + 40 || e.y < -40 || e.y > H + 40) {
+          e.done = true
+          for (let k = 0; k < 16; k++) { const a3 = Math.random() * 7, v3 = 80 + Math.random() * 220; bursts.push({ x: Math.max(4, Math.min(W - 4, e.x)), y: Math.max(4, Math.min(H - 4, e.y)), vx: Math.cos(a3) * v3, vy: Math.sin(a3) * v3, life: 0.6 }) }
+        }
+      }
+      if (!e.done) {
+        const st2 = e.t < 0.5 ? 1 : 1 + (e.t - 0.5) * 3
+        ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang + e.spin); ctx.scale(st2, 1 / st2)
+        ctx.strokeStyle = 'rgba(241,239,233,.9)'; ctx.lineWidth = 1.3
+        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-3, 0); ctx.lineTo(-6, 5); ctx.closePath(); ctx.stroke(); ctx.restore()
+      }
+      return e.t < 1.6
+    })
+    if (caught) bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; ctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; ctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
     // the escaping pixel
     if (rogue && !caught && tt < 0.3) {
       const q = rogue, [hx, hy] = q.home
@@ -169,7 +187,7 @@ const hero = (() => {
       // two micro hunters chase the pixel and shoot at it, the pixel dodges
       for (const s of shots) {
         const rx = q.x - s.x, ry = q.y - s.y, dd = Math.hypot(rx, ry)
-        if (dd < 140 && rx * s.vx + ry * s.vy > 0) { const px = -s.vy, py = s.vx, n = Math.hypot(px, py), sg = Math.sign(rx * px + ry * py) || 1; q.vx += px / n * sg * 1500 * dt * (1 - dd / 140); q.vy += py / n * sg * 1500 * dt * (1 - dd / 140) }
+        if (dd < 200 && rx * s.vx + ry * s.vy > 0) { const px = -s.vy, py = s.vx, n = Math.hypot(px, py), sg = Math.sign(rx * px + ry * py) || 1; q.vx += px / n * sg * 2600 * dt * (1 - dd / 200); q.vy += py / n * sg * 2600 * dt * (1 - dd / 200) }
       }
       for (const h of hunters) {
         const dx2 = q.x - h.x, dy2 = q.y - h.y, dist = Math.hypot(dx2, dy2) + 1e-3, ux = dx2 / dist, uy = dy2 / dist
@@ -180,9 +198,9 @@ const hero = (() => {
         h.x += h.vx * dt; h.y += h.vy * dt
         h.cool -= dt
         if (h.cool <= 0 && dist < 420) {
-          const v = 430, tt2 = dist / v, ax = q.x + q.vx * tt2 * 0.8 - h.x, ay = q.y + q.vy * tt2 * 0.8 - h.y, an = Math.hypot(ax, ay) + 1e-3
+          const v = 400, tt2 = dist / v, sp2 = (Math.random() - 0.5) * 0.3, ax0 = q.x + q.vx * tt2 * 0.5 - h.x, ay0 = q.y + q.vy * tt2 * 0.5 - h.y, ax = ax0 * Math.cos(sp2) - ay0 * Math.sin(sp2), ay = ax0 * Math.sin(sp2) + ay0 * Math.cos(sp2), an = Math.hypot(ax, ay) + 1e-3
           shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 99, age: 0 })
-          h.cool = 0.8 + Math.random() * 0.9
+          h.cool = 1.3 + Math.random() * 1.2
         }
         const ang = Math.atan2(uy, ux)
         ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(ang)
@@ -198,7 +216,7 @@ const hero = (() => {
           const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - (p.ty + p.oy)
           if (dxp * dxp + dyp * dyp < 220) { p.vx -= dxp * 0.08 + s.vx * 0.004; p.vy -= dyp * 0.08 + s.vy * 0.004 }
         }
-        if (s.age < 1.4 && Math.hypot(s.x - q.x, s.y - q.y) < 8) {
+        if (s.age < 1.4 && Math.hypot(s.x - q.x, s.y - q.y) < 6) {
           q.hit = 0.35; q.vx += s.vx * 0.9; q.vy += s.vy * 0.9
           for (let k = 0; k < 14; k++) { const a2 = Math.random() * 7, v2 = 60 + Math.random() * 160; bursts.push({ x: q.x, y: q.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.5 }) }
           setTimeout(() => triggerX(), 250)
@@ -232,22 +250,19 @@ const hero = (() => {
   function triggerX() {
     if (caught) return
     caught = true; cv.style.cursor = ''; shots = []
+    exits = hunters.map(h => ({ x: h.x, y: h.y, ang: Math.atan2(h.vy, h.vx) || 0, spin: 0, t: 0, vx: 0, vy: 0, done: false })); hunters = []
     tstep.textContent = 'caught'
     gsap.timeline()
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
-      .to(hero.st, { d: 1, duration: 0.5, ease: 'power2.out' })
-      .to(hero.st, { s: Math.PI * 2, duration: 1.3, ease: 'back.inOut(1.4)' }, '+=1.2')
-      .to(hero.st, { d: 0, duration: 0.6, ease: 'power2.in' }, '+=1.6')
-      .add(() => { SPIN = 0 })
-      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 0.3 })
-      .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9) })
+      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
+      .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9); hunters = [{ x: -30, y: rogue.home[1] - 80, vx: 0, vy: 0, cool: 3, side: 1 }, { x: W + 30, y: rogue.home[1] + 80, vx: 0, vy: 0, cool: 4, side: -1 }] })
   }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
 
   return {
     build, frame,
     setT: v => { t = v }, setScroll: v => { scrollT = v },
-    st: { get m() { return M }, set m(v) { M = v }, get d() { return DANCE }, set d(v) { DANCE = v }, get s() { return SPIN }, set s(v) { SPIN = v } }, rogue: () => (rogue ? { x: rogue.x, y: rogue.y } : null),
+    st: { get m() { return M }, set m(v) { M = v } }, rogue: () => (rogue ? { x: rogue.x, y: rogue.y } : null),
   }
 })()
 
@@ -274,7 +289,7 @@ ScrollTrigger.create({
 
 /* ---------- about ---------- */
 const h2 = document.querySelector('.reveal-words')
-h2.innerHTML = h2.textContent.split(' ').map(w => `<span class="w">${w}</span>`).join(' ')
+h2.innerHTML = h2.textContent.split(' ').map((w, i) => `<span class="w${i >= 2 && i <= 8 ? ' hl' : ''}">${w}</span>`).join(' ')
 gsap.to('.reveal-words .w', {
   opacity: 1, stagger: 0.1, ease: 'none',
   scrollTrigger: { trigger: '.about', start: 'top 70%', end: 'center 45%', scrub: true },

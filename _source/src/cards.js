@@ -66,7 +66,14 @@ function thales(cv) {
   }
 
   // renders the region [rx, ry, rw, rh] of the scene (base screen units) at scale K2
-  function renderScene(rx, ry, rw, rh, K2) {
+  const renderScene = (...a) => { const g = renderSceneGen(...a); let r; do { r = g.next() } while (!r.done); return r.value }
+  // same render, sliced over several frames so a new zoom patch never freezes the page
+  function renderSceneAsync(args, done) {
+    const g = renderSceneGen(...args)
+    const step = () => { const t0 = performance.now(); let r; do { r = g.next() } while (!r.done && performance.now() - t0 < 5); r.done ? done(r.value) : setTimeout(step, 0) }
+    step()
+  }
+  function* renderSceneGen(rx, ry, rw, rh, K2) {
     const cnv = document.createElement('canvas'); cnv.width = Math.round(rw * K2); cnv.height = Math.round(rh * K2)
     const b = cnv.getContext('2d'), BW = cnv.width, BH = cnv.height
     b.fillStyle = '#090909'; b.fillRect(0, 0, BW, BH)
@@ -82,6 +89,7 @@ function thales(cv) {
         const X = (rx + i * st / K2 - W / 2) * Z / f
         lev[j * gw + i] = Math.floor(height(X, Z) * 26); fog[j * gw + i] = Math.max(0, 1 - (Z - 1) / 11)
       }
+      if (j % 6 === 0) yield
     }
     for (let j = 0; j < gh - 1; j++) for (let i = 0; i < gw - 1; i++) {
       const a = lev[j * gw + i]; if (a === -999) continue
@@ -183,7 +191,7 @@ function thales(cv) {
     cur = { ...best, th, boxes, cx, cy, bb: [x0, y0, x1, y1], pts: tankPts(boxes, 0.35).map(([x, y]) => ({ x, y, ex: randn(), ey: randn() })) }
     clock = 0
     patch = null
-    setTimeout(() => { const rw = W / 3.6 * 1.25, rh = H / 3.6 * 1.25, r = [cx - rw / 2, cy - rh / 2, rw, rh]; patch = { r, c: renderScene(...r, 3.6) } }, 30)
+    { const rw = W / 3.6 * 1.25, rh = H / 3.6 * 1.25, r = [cx - rw / 2, cy - rh / 2, rw, rh]; renderSceneAsync([...r, 3.6], c => { patch = { r, c } }) }
   }
 
   const st = sized(cv, ({ w, h }) => { W = w; H = h; build() })

@@ -41,24 +41,6 @@ export function initFlow() {
     for (let i = 0; i < N; i++) out.push(pts[Math.floor((i + Math.random() * 0.9) / N * pts.length) % pts.length])
     return out.sort(() => Math.random() - 0.5)
   }
-  // École Polytechnique, written compactly with the same points under the photo
-  function sampleSchool(width) {
-    const lines = ['ÉCOLE', 'POLYTECHNIQUE'], o = document.createElement('canvas'), g = o.getContext('2d')
-    let fs = 40; g.font = `800 ${fs}px Syne`
-    fs = Math.min(fs * width / g.measureText(lines[1]).width, 54)
-    o.width = Math.ceil(width) + 4; o.height = Math.ceil(fs * 2.1)
-    g.font = `800 ${fs}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
-    g.fillText(lines[0], o.width / 2, fs * 0.55); g.fillText(lines[1], o.width / 2, fs * 1.55)
-    const d = g.getImageData(0, 0, o.width, o.height).data, pts = []
-    for (let y = 0; y < o.height; y += 1) for (let x = 0; x < o.width; x += 1) if (d[4 * (y * o.width + x) + 3] > 140) pts.push([x - o.width / 2, y])
-    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[pts[i], pts[j]] = [pts[j], pts[i]] }
-    // spread the N points evenly over the glyphs
-    const out = [], cell = Math.sqrt(pts.length / N) * 0.9, seen = new Set()
-    for (const q of pts) { const k = Math.round(q[0] / cell) + ',' + Math.round(q[1] / cell); if (!seen.has(k)) { seen.add(k); out.push(q) } if (out.length >= N) break }
-    while (out.length < N) out.push(pts[out.length % pts.length])
-    return out
-  }
-  let school = [], schoolW = 0
   size(); addEventListener('resize', size)
 
   const P = Array.from({ length: N }, (_, i) => ({
@@ -69,7 +51,7 @@ export function initFlow() {
 
   const $ = s => document.querySelector(s)
   const els = {
-    hero: $('#particles'), photo: $('.about-photo'), sub: $('.about .sub'), about: $('.about'), cards: [...document.querySelectorAll('.proj')],
+    hero: $('#particles'), photo: $('.about-photo'), hl: [...document.querySelectorAll('.reveal-words .hl')], about: $('.about'), cards: [...document.querySelectorAll('.proj')],
     card1: $('canvas[data-kind=tiles]'), dm: $('#dm'), contact: $('.contact'),
   }
   const absTop = el => el.getBoundingClientRect().top + scrollY
@@ -87,9 +69,24 @@ export function initFlow() {
     const st0 = p => { const q = heroT[p.hk % heroT.length]; return [hr.left + q[0], hr.top + q[1]] }
 
     const pr = els.photo.getBoundingClientRect()
-    const sr = els.sub.getBoundingClientRect(), sw = Math.min(sr.width, mob ? W * 0.8 : 440)
-    if (Math.abs(sw - schoolW) > 2) { schoolW = sw; school = sampleSchool(sw) }
-    const st1 = p => { const q = school[p.i]; return [sr.left + sw / 2 + q[0] + Math.sin(time * 1.4 + p.i) * 0.5, sr.bottom + 34 + q[1] + Math.cos(time * 1.1 + p.i) * 0.5] }
+    // About: most points underline "M2 Data Science student at École Polytechnique", flowing along it,
+    // the others stream around the photo frame
+    const lines = []
+    for (const el of els.hl) { const r = el.getBoundingClientRect(), l = lines.find(L => Math.abs(L.b - r.bottom) < 6); l ? (l.x0 = Math.min(l.x0, r.left), l.x1 = Math.max(l.x1, r.right)) : lines.push({ x0: r.left, x1: r.right, b: r.bottom }) }
+    const totalL = lines.reduce((s2, L) => s2 + L.x1 - L.x0, 0) || 1
+    const perim = 2 * (pr.width + pr.height)
+    const st1 = p => {
+      if (p.r < 0.68 && lines.length) {
+        let d = ((p.u + time * 0.05) % 1) * totalL
+        for (const L of lines) { const w = L.x1 - L.x0; if (d <= w) return [L.x0 + d, L.b + 4 + p.e2 * 1.6 + Math.sin(d * 0.05 + time * 3) * 1.2]; d -= w }
+      }
+      let d = ((p.u + time * 0.025) % 1) * perim, x, yy, off = 14 + Math.abs(p.e1) * 6
+      if (d < pr.width) { x = pr.left + d; yy = pr.top - off }
+      else if ((d -= pr.width) < pr.height) { x = pr.right + off; yy = pr.top + d }
+      else if ((d -= pr.height) < pr.width) { x = pr.right - d; yy = pr.bottom + off }
+      else { d -= pr.width; x = pr.left - off; yy = pr.bottom - d }
+      return [x, yy]
+    }
 
     // SyncTweedies: synced most of the time, a short burst of noise now and then
     const cr = els.card1.getBoundingClientRect(), noise = Math.max(0, Math.sin(time * 0.55)) ** 4
