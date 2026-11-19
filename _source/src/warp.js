@@ -6,7 +6,7 @@
   and rebuild the site.
 */
 const C = 280                                    // the banner multiplier that counts as the speed of light
-const DC = 480                                   // clicked pixels to swallow before the hole collapses (~7 clicks)
+const DC = 700                                   // fed pixels to swallow before the hole collapses (~5-6 s of holding)
 const clamp01 = v => Math.max(0, Math.min(1, v))
 const smooth = (a, b, v) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t) }
 
@@ -127,38 +127,33 @@ export function initWarp(lenis) {
     if (busy) return
     busy = true; held = false; mult = 1
     const W = innerWidth, H = innerHeight, hx = W / 2, hy = H / 2, maxD = Math.hypot(W, H) / 2
+    const STEP = 3
+    let bgR = 11, bgG = 11, bgB = 11
 
     // 1. the page, as pixels
-    const sd = rasterise(W, H).getContext('2d').getImageData(0, 0, W, H).data
-    const STEP = 3, bgR = sd[0], bgG = sd[1], bgB = sd[2]
-    const px = []
-    for (let y = 0; y < H - 2; y += STEP) for (let x = 0; x < W - 2; x += STEP) {
-      const k = 4 * ((y + 1) * W + x + 1), r = sd[k], gg = sd[k + 1], b = sd[k + 2]
-      if (Math.abs(r - bgR) + Math.abs(gg - bgG) + Math.abs(b - bgB) < 14) continue
-      const dx = x - hx, dy = y - hy, d = Math.hypot(dx, dy)
-      px.push({
-        hx: x, hy: y, col: (0xff000000 | (b << 16) | (gg << 8) | r) >>> 0, d, a0: Math.atan2(dy, dx),
-        ts: 0.35 + 1.7 * (d / maxD) ** 0.85 + Math.random() * 0.35, T: 0.55 + 0.6 * (d / maxD) + Math.random() * 0.3,
-        spin: (2 + Math.random() * 1.5) * (1 + 120 / (d + 60)), keep: false, gone: false,
-      })
-    }
-    // a few leftover pixels stay behind: the hole catches them afterwards
-    const ORBN = Math.min(1400, Math.round(px.length * 0.03))
-    for (let i = 0; i < ORBN; i++) { const p = px[(Math.random() * px.length) | 0]; if (p && p.d > maxD * 0.25) p.keep = true }
-    const y0 = scrollY
-    // the page may have scrolled meanwhile: rebuild what is on screen now
-    function retarget() {
-      const d2 = rasterise(W, H).getContext('2d').getImageData(0, 0, W, H).data
-      px.length = 0
+    const sample = () => {
+      const d = rasterise(W, H).getContext('2d').getImageData(0, 0, W, H).data, out = []
+      bgR = d[0]; bgG = d[1]; bgB = d[2]
       for (let y = 0; y < H - 2; y += STEP) for (let x = 0; x < W - 2; x += STEP) {
-        const k = 4 * ((y + 1) * W + x + 1), r = d2[k], gg = d2[k + 1], b = d2[k + 2]
+        const k = 4 * ((y + 1) * W + x + 1), r = d[k], gg = d[k + 1], b = d[k + 2]
         if (Math.abs(r - bgR) + Math.abs(gg - bgG) + Math.abs(b - bgB) < 14) continue
-        px.push({ hx: x, hy: y, col: (0xff000000 | (b << 16) | (gg << 8) | r) >>> 0, d: Math.hypot(x - hx, y - hy) })
+        out.push({ hx: x, hy: y, col: (0xff000000 | (b << 16) | (gg << 8) | r) >>> 0, d: Math.hypot(x - hx, y - hy) })
       }
+      return out
     }
+    const px = sample()
+    for (const p of px) {
+      p.ts = 0.35 + 1.7 * (p.d / maxD) ** 0.85 + Math.random() * 0.35
+      p.T = 0.55 + 0.6 * (p.d / maxD) + Math.random() * 0.3
+      p.spin = (2 + Math.random() * 1.5) * (1 + 120 / (p.d + 60)); p.keep = false; p.gone = false; p.go = false
+    }
+    // a few pixels break loose instead of falling in: they swirl chaotically and end up in orbit
+    const ORBN = Math.min(1400, Math.round(px.length * 0.035))
+    for (let i = 0; i < ORBN; i++) { const p = px[(Math.random() * px.length) | 0]; if (p && p.d > maxD * 0.2) p.keep = true }
     let tAppear = 2
     for (const p of px) if (!p.keep) tAppear = Math.max(tAppear, p.ts + p.T)
     tAppear += 0.05
+    const y0 = scrollY
 
     // 2. canvases: pixels written into a buffer at CSS resolution, effects drawn on top
     const cv = document.createElement('canvas'); cv.className = 'bh-layer'
@@ -177,27 +172,41 @@ export function initWarp(lenis) {
 
     const R0 = Math.min(W, H) * 0.07, TILT = 0.26
     const ACCs = 'rgba(200,255,0,', FGs = 'rgba(241,239,233,'
-    let phase = 'eat', tPhase = 0, density = 0, shake = 0, rb = null, spinKick = 0, lastY = scrollY
-    const orb = [], sparks = []
-    const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4 }
-    const SPC = [0xff00ffc8, 0xffe9eff1]               // lime, off-white (ABGR)
-    const spark = (x, y, mass = false) => {
-      const dx = x - hx, dy = (y - hy) / TILT
-      sparks.push({ r: Math.hypot(dx, dy), a: Math.atan2(dy, dx), vr: -R0 * 2, col: SPC[(Math.random() < 0.55) | 0], mass })
+    const MASS = 0xff2878ff                               // the pixels you feed it: orange (ABGR)
+    let phase = 'eat', tPhase = 0, density = 0, shake = 0, rb = null, spinKick = 0, lastY = scrollY, yR = 0
+    const free = [], orb = []                              // free: loose pixels (x, y), orb: pixels in the disk (r, a)
+    const mouse = { x: -1e4, y: -1e4, down: false, t0: 0, acc: 0 }
+
+    // loose pixels: pulled toward the centre, kicked around, never quite falling in
+    const kickFree = (p, dt, G) => {
+      const dx = hx - p.x, dy = hy - p.y, d = Math.hypot(dx, dy) + 1
+      const pull = G / (d * 0.012 + 1) / d
+      p.vx += (dx * pull - dy / d * 140 + (Math.random() - 0.5) * 900) * dt
+      p.vy += (dy * pull + dx / d * 140 + (Math.random() - 0.5) * 900) * dt
+      if (d < 50) { p.vx -= dx / d * 400 * dt; p.vy -= dy / d * 400 * dt }
+      p.vx *= Math.exp(-0.9 * dt); p.vy *= Math.exp(-0.9 * dt)
+      p.x += p.vx * dt; p.y += p.vy * dt
     }
-    cv.addEventListener('pointermove', e => {
-      mouse.x = e.clientX; mouse.y = e.clientY
-      const sp = Math.hypot(mouse.x - mouse.px, mouse.y - mouse.py)
-      if (phase === 'idle' && mouse.px > -1e3) for (let k = 0; k < Math.min(5, sp / 5); k++) spark(mouse.x + (Math.random() - 0.5) * 6, mouse.y + (Math.random() - 0.5) * 6)
-      mouse.px = mouse.x; mouse.py = mouse.y
-    })
+    const toDisk = (x, y, col, kind) => {
+      const dx = x - hx, dy = (y - hy) / TILT
+      orb.push({ r: Math.min(Math.hypot(dx, dy), maxD * 1.5), a: Math.atan2(dy, dx), vr: 0, rt: R0 * (1.35 + 2.6 * Math.random() ** 1.4), col, x0: x, y0: y, c: 0, kind })
+    }
+    // clicking feeds it: a tap drops a few pixels into orbit, holding releases an ever-growing stream
+    const feed = (n, kind) => {
+      for (let k = 0; k < n; k++) toDisk(mouse.x + (Math.random() - 0.5) * 26, mouse.y + (Math.random() - 0.5) * 26, MASS, kind)
+    }
+    cv.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY })
     cv.addEventListener('pointerdown', e => {
-      e.stopPropagation()
-      if (phase === 'idle') for (let k = 0; k < 70; k++) spark(e.clientX + (Math.random() - 0.5) * 34, e.clientY + (Math.random() - 0.5) * 34, true)
+      e.stopPropagation(); mouse.x = e.clientX; mouse.y = e.clientY
+      if (phase !== 'idle') return
+      mouse.down = true; mouse.t0 = performance.now(); mouse.acc = 0
+      feed(22, 'tap')
     })
+    const release = () => { mouse.down = false }
+    cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release); cv.addEventListener('pointerleave', release)
 
     const proj = (r, a) => [hx + Math.cos(a) * r, hy + Math.sin(a) * r * TILT]
-    const Rnow = () => R0 * (1 + 0.35 * Math.min(1, density / DC))     // it grows as it feeds
+    const Rnow = () => R0 * (1 + 0.4 * Math.min(1, density / DC))     // it grows as it feeds
     const orbit = (o, dt, R, pull) => {
       o.a += 2.8 * (R / Math.max(o.r, R * 0.6)) ** 1.5 * dt * (1 + pull + spinKick)
       o.vr *= Math.exp(-3 * dt); o.r += (o.vr - R * 0.03 * (1 + 6 * pull)) * dt
@@ -220,29 +229,34 @@ export function initWarp(lenis) {
     const start = performance.now(); let lastNow = start
     const frame = now => {
       const t = (now - start) / 1000, dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now
-      // the page keeps scrolling underneath; scrolling stirs the disk
+      // the page keeps scrolling underneath: pixels still sitting on it follow, and scrolling stirs the disk
       spinKick = spinKick * Math.exp(-3 * dt) + Math.min(6, Math.abs(scrollY - lastY) / 40); lastY = scrollY
+      const sy = scrollY - y0
       const darkA = phase === 'rebuild' ? 1 - smooth(0.2, 1.4, t - tPhase) : smooth(0.2, tAppear, t)
-      const bgv = Math.round(11 - 7 * darkA), BG = (0xff000000 | (bgv << 16) | (bgv << 8) | bgv) >>> 0
+      const bgv = Math.round(bgR - (bgR - 4) * darkA), BG = (0xff000000 | (bgv << 16) | (bgv << 8) | bgv) >>> 0
       u32.fill(BG)
       g.clearRect(0, 0, W, H)
 
       if (phase === 'eat') {
-        // every pixel holds, trembles, then spirals into the pinhole; the nearest go first
         for (const p of px) {
           if (p.gone) continue
           const u = t - p.ts
-          if (p.keep && u > 0) {                          // leftovers come loose and drift
-            const k = smooth(0, 1, u)
-            put(p.hx + Math.sin(t * 1.3 + p.d) * 6 * k, p.hy + Math.cos(t * 1.1 + p.a0) * 6 * k, p.col)
+          if (u < 0) {                                    // still on the page: holds, then trembles
+            const j = u > -0.25 ? (u + 0.25) * 6 : 0
+            put(p.hx + (Math.random() - 0.5) * j, p.hy - sy + (Math.random() - 0.5) * j, p.col, STEP); continue
+          }
+          if (p.keep) {                                   // breaks loose
+            p.gone = true
+            const dx = p.hx - hx, dy = p.hy - sy - hy, d = Math.hypot(dx, dy) + 1
+            free.push({ x: p.hx, y: p.hy - sy, vx: -dy / d * 160 + (Math.random() - 0.5) * 120, vy: dx / d * 160 + (Math.random() - 0.5) * 120, col: p.col, tc: 0.4 + Math.random() * 2.2 })
             continue
           }
-          if (u < 0) { const j = u > -0.25 ? (u + 0.25) * 6 : 0; put(p.hx + (Math.random() - 0.5) * j, p.hy + (Math.random() - 0.5) * j, p.col, STEP); continue }
-          const v = Math.min(1, u / p.T), e = v ** 1.8
-          const r = p.d * (1 - e), a = p.a0 + p.spin * v * v
+          if (!p.go) { p.go = true; const dx = p.hx - hx, dy = p.hy - sy - hy; p.d = Math.hypot(dx, dy); p.a0 = Math.atan2(dy, dx) }
+          const v = Math.min(1, u / p.T), r = p.d * (1 - v ** 1.8), a = p.a0 + p.spin * v * v
           if (v >= 1 || r < 2) { p.gone = true; continue }
           put(hx + Math.cos(a) * r, hy + Math.sin(a) * r, fade(p.col, 1 - 0.4 * v))
         }
+        for (const f of free) { kickFree(f, dt, 9000); put(f.x, f.y, f.col) }
         blit()
         const pr = 1.5 + 3 * smooth(0, tAppear, t)       // the pinhole
         const gl = g.createRadialGradient(hx, hy, pr, hx, hy, pr * 8)
@@ -251,50 +265,59 @@ export function initWarp(lenis) {
         g.fillStyle = '#000'; g.beginPath(); g.arc(hx, hy, pr, 0, Math.PI * 2); g.fill()
         if (t >= tAppear) {
           phase = 'idle'; tPhase = t
-          for (const p of px) if (p.keep) {                // the leftovers get caught and fall into orbit, keeping their colour
-            const x0 = p.hx + Math.sin(t * 1.3 + p.d) * 6, y0 = p.hy + Math.cos(t * 1.1 + p.a0) * 6
-            const dx = x0 - hx, dy = (y0 - hy) / TILT
-            orb.push({ r: Math.min(Math.hypot(dx, dy), maxD * 1.4), a: Math.atan2(dy, dx), vr: 0, rt: R0 * (1.35 + 2.6 * Math.random() ** 1.4), col: p.col, x0, y0, c: 0 })
+          // the hole forms violently: a spray of pixels thrown out, to be caught again
+          const cols = free.length ? free.map(f => f.col) : [0xffe9eff1]
+          for (let k = 0; k < 380; k++) {
+            const a = Math.random() * Math.PI * 2, sp = 250 + Math.random() * 700
+            free.push({ x: hx + Math.cos(a) * R0 * 0.6, y: hy + Math.sin(a) * R0 * 0.6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, col: cols[(Math.random() * cols.length) | 0], tc: 0.25 + Math.random() * 1.6 })
           }
+          for (const f of free) f.tc = Math.min(f.tc, 2.4)
         }
       } else if (phase === 'idle') {
         const u = t - tPhase, R = Rnow()
         const pop = u < 0.3 ? 1 - (1 - u / 0.3) ** 3 : 1    // the hole appears all at once around the pinhole
         const Rv = R * (pop + 0.08 * Math.sin(Math.min(u, 1.2) * 9) * Math.exp(-u * 4))
-        shake = 3 * smooth(0.7, 1, density / DC)
-        for (const o of orb) {
-          o.c = Math.min(1, o.c + dt / 1.6)
-          o.r += (o.rt - o.r) * (1 - Math.exp(-2.2 * dt)) * (1 - o.c * 0.6)
-          orbit(o, dt, R, 0)
+        shake = 4 * smooth(0.6, 1, density / DC)
+        // holding the click: an exponential stream (≈ 5-6 s of holding blows it up)
+        if (mouse.down) {
+          const h = (now - mouse.t0) / 1000
+          mouse.acc += 26 * Math.exp(h / 1.3) * dt
+          const n = Math.floor(mouse.acc); mouse.acc -= n
+          if (n) feed(Math.min(n, 60), 'stream')
         }
-        for (let k = orb.length - 1; k >= 0; k--) if (orb[k].r < R) orb.splice(k, 1)
-        for (let k = sparks.length - 1; k >= 0; k--) {
-          const o = sparks[k]; orbit(o, dt, R, 3.5); o.vr -= R * 6 * dt
-          if (o.r < R * 1.02) { sparks.splice(k, 1); if (o.mass) density++ }
+        for (let k = free.length - 1; k >= 0; k--) {
+          const f = free[k]; kickFree(f, dt, 16000)
+          if (u > f.tc) { toDisk(f.x, f.y, f.col, 'loose'); free.splice(k, 1) }
         }
         const front = []
-        for (const o of orb) {
-          const [ox, oy] = proj(o.r, o.a), k = smooth(0, 1, o.c), cx = o.x0 + (ox - o.x0) * k, cy = o.y0 + (oy - o.y0) * k
+        for (let k = orb.length - 1; k >= 0; k--) {
+          const o = orb[k]
+          o.c = Math.min(1, o.c + dt / (o.kind === 'stream' ? 0.5 : 1.2))
+          o.r += (o.rt - o.r) * (1 - Math.exp(-2.4 * dt)) * (1 - o.c * 0.7)
+          if (o.kind === 'stream') { orbit(o, dt, R, 3); o.vr -= R * 6 * dt } else orbit(o, dt, R, 0)
+          if (o.r < R * 1.02) { orb.splice(k, 1); if (o.col === MASS) density++; continue }
+          const [ox, oy] = proj(o.r, o.a), e = smooth(0, 1, o.c), cx = o.x0 + (ox - o.x0) * e, cy = o.y0 + (oy - o.y0) * e
           if (Math.sin(o.a) > 0 || o.c < 0.6) front.push(cx, cy, o.col); else put(cx, cy, o.col)
         }
-        for (const o of sparks) { const [sx, sy] = proj(o.r, o.a); if (Math.sin(o.a) > 0) front.push(sx, sy, o.col); else put(sx, sy, o.col) }
+        for (const f of free) front.push(f.x, f.y, f.col)
         blit()
-        if (u < 0.4) { g.fillStyle = FGs + ((1 - u / 0.4) * 0.18).toFixed(3) + ')'; g.fillRect(0, 0, W, H) }
-        lensRing(Rv, smooth(0, 0.4, u))
+        if (u < 0.35) { g.fillStyle = FGs + ((1 - u / 0.35) * 0.16).toFixed(3) + ')'; g.fillRect(0, 0, W, H) }
+        lensRing(Rv, smooth(0, 0.3, u))
         u32.fill(0); for (let i = 0; i < front.length; i += 3) put(front[i], front[i + 1], front[i + 2]); blit()
         const pct = Math.min(99, Math.floor(100 * density / DC))   // a very discreet readout
         g.fillStyle = FGs + (0.3 * smooth(1, 2, u)).toFixed(3) + ')'
         g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'center'
-        g.fillText(`DENSITY ${String(pct).padStart(2, '0')}%`, hx, hy + R0 * 5)
-        if (density >= DC) { phase = 'collapse'; tPhase = t }
+        g.fillText(density ? `MASS ${String(pct).padStart(2, '0')}%` : 'HOLD TO FEED', hx, hy + R0 * 5)
+        if (density >= DC) { phase = 'collapse'; tPhase = t; mouse.down = false }
       } else if (phase === 'collapse') {
-        // critical density: it shrinks, gathers power, trembles harder and harder
+        // critical mass: it shrinks, gathers power, trembles harder and harder
         const u = t - tPhase, R = Rnow(), v = clamp01(u / 1.5), Rv = R * (1 - 0.85 * smooth(0, 1, v))
-        shake = 3 + 14 * v * v
-        for (const arr of [orb, sparks]) {
-          for (const o of arr) { orbit(o, dt, R, 8); o.vr -= R * 5 * dt }
-          for (let k = arr.length - 1; k >= 0; k--) if (arr[k].r < Rv) arr.splice(k, 1)
-          for (const o of arr) { const [sx, sy] = proj(o.r, o.a); put(sx, sy, o.col) }
+        shake = 4 + 14 * v * v
+        for (const f of free) toDisk(f.x, f.y, f.col, 'loose'); free.length = 0
+        for (let k = orb.length - 1; k >= 0; k--) {
+          const o = orb[k]; o.c = 1; orbit(o, dt, R, 8); o.vr -= R * 5 * dt
+          if (o.r < Rv) { orb.splice(k, 1); continue }
+          const [sx, sy2] = proj(o.r, o.a); put(sx, sy2, o.col)
         }
         blit()
         const jx = hx + shake * (Math.random() - 0.5), jy = hy + shake * (Math.random() - 0.5), gR = R * (1.2 + 2.5 * v)
@@ -305,18 +328,18 @@ export function initWarp(lenis) {
         if (u >= 1.55) {
           phase = 'rebuild'; tPhase = t
           document.documentElement.classList.remove('bh-on')       // the real page is back underneath, still covered
-          if (Math.abs(scrollY - y0) > 2) retarget()
+          px.length = 0; px.push(...sample()); yR = scrollY          // rebuild what is on screen now
           rb = px.map(p => ({ d: Math.random() * 0.25 + (p.d / maxD) * 0.3, T: 0.9 + Math.random() * 0.7, bend: (Math.random() - 0.5) * 0.9 }))
         }
       } else if (phase === 'rebuild') {
-        // pouf: every pixel of the site bursts out of the point and lands back where it belongs
-        const u = t - tPhase
+        // pouf: every pixel of the site bursts out of the point and lands back where it belongs (following the scroll)
+        const u = t - tPhase, s2 = scrollY - yR
         let done = true
         for (let i = 0; i < px.length; i++) {
           const p = px[i], q = rb[i], v = clamp01((u - q.d) / q.T)
           if (v < 1) done = false
           if (v <= 0) continue
-          const e = 1 - (1 - v) ** 3, b = Math.sin(Math.PI * e) * q.bend, dx = p.hx - hx, dy = p.hy - hy
+          const e = 1 - (1 - v) ** 3, b = Math.sin(Math.PI * e) * q.bend, dx = p.hx - hx, dy = p.hy - s2 - hy
           put(hx + dx * e - dy * b, hy + dy * e + dx * b, p.col, v > 0.97 ? STEP : 2)
         }
         const veil = 1 - smooth(0, 0.3, u - 2.05)            // once everything has landed, hand over to the real page
@@ -330,6 +353,9 @@ export function initWarp(lenis) {
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
+
+    // the canvas sits on top, but the wheel still has to reach the page
+    cv.addEventListener('wheel', () => {}, { passive: true })
 
     function finish() {
       cv.remove()
