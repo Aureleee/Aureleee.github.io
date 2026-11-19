@@ -77,7 +77,7 @@ const hero = (() => {
       ox: 0, oy: 0, vx: 0, vy: 0,            // mouse offset spring
       ph: Math.random() * 0.8,
       acc: Math.random() < 0.025,
-      loose: Math.random() < 0.05, lp: Math.random() * 20,
+      loose: Math.random() < 0.03, lp: Math.random() * 20,
     }))
     // free particles wandering around the name
     const band = (lines.length * lh) * 1.4 + H * 0.12
@@ -104,7 +104,7 @@ const hero = (() => {
     const xd = g.getImageData(0, 0, W, H).data, xt = []
     for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (xd[4 * (y * W + x) + 3] > 128) xt.push([x, y])
     for (let i = xt.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[xt[i], xt[j]] = [xt[j], xt[i]] }
-    P.forEach((p, i) => { const q = xt[i % xt.length]; p.xx = q[0] + (Math.random() - 0.5) * 2; p.xy = q[1] + (Math.random() - 0.5) * 2; p.d = p.d ?? Math.random() })
+    P.forEach((p, i) => { const q = xt[i % xt.length]; p.xx = q[0] + (Math.random() - 0.5) * 2; p.xy = q[1] + (Math.random() - 0.5) * 2; p.d = p.d ?? Math.random(); p.cr = p.cr ?? (40 + Math.random() * 220) * (W < 800 ? 0.5 : 1); p.ca = p.ca ?? Math.random() * 7 })
   }
   xImg.onload = () => { if (P.length) computeX(lastN, lastY) }
 
@@ -129,11 +129,12 @@ const hero = (() => {
     for (const p of P) {
       // mouse repulsion with spring back
       // slow fluid drift: a smooth flow field, same for neighbours
-      let fx = 5.5 * Math.sin(p.ty * 0.009 + p.tx * 0.0045 + time * 1.1) + 0.5 * Math.sin(time * 1.7 + p.ph * 4)
-      let fy = 4.5 * Math.cos(p.tx * 0.006 - p.ty * 0.003 + time * 0.85) + 0.5 * Math.cos(time * 1.4 + p.ph * 5)
+      let fx = 3.6 * Math.sin(p.ty * 0.009 + p.tx * 0.0045 + time * 1.1) + 0.5 * Math.sin(time * 1.7 + p.ph * 4)
+      let fy = 3 * Math.cos(p.tx * 0.006 - p.ty * 0.003 + time * 0.85) + 0.5 * Math.cos(time * 1.4 + p.ph * 5)
       if (p.loose) { fx += 16 * Math.sin(time * 0.8 + p.lp) + 8 * Math.sin(time * 1.9 + p.lp * 2); fy += 11 * Math.cos(time * 0.65 + p.lp * 1.3) }
-      const m = M <= 0 ? 0 : easeIO(Math.max(0, Math.min(1, M * 1.5 - p.d * 0.5)))
-      const bx = p.tx + (p.xx - p.tx) * m, by = p.ty + (p.xy - p.ty) * m
+      const m = M <= 0 ? 0 : easeIO(Math.max(0, Math.min(1, M * 1.6 - p.d * 0.6)))
+      const ch = Math.sin(Math.PI * m) * p.cr, ang = p.ca + m * 5 + time * 0.8
+      const bx = p.tx + (p.xx - p.tx) * m + Math.cos(ang) * ch, by = p.ty + (p.xy - p.ty) * m + Math.sin(ang) * ch * 0.8
       const x0 = cx + a * (bx - cx) + b * p.ex + fx, y0 = cy + a * (by - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
@@ -170,8 +171,8 @@ const hero = (() => {
     caught = true; cv.style.cursor = ''
     tstep.textContent = 'caught'
     gsap.timeline()
-      .to(hero.st, { m: 1, duration: 1.8, ease: 'power2.inOut' })
-      .to(hero.st, { m: 0, duration: 1.8, ease: 'power2.inOut', delay: 3.5 })
+      .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
+      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
       .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9) })
   })
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
@@ -193,7 +194,7 @@ document.fonts.load('800 80px Syne').then(() => document.fonts.ready).then(() =>
   tl.to(c, { v: 100, duration: 1.3, ease: 'power2.inOut', onUpdate: () => { countEl.textContent = Math.round(c.v) } })
     .to('.loader', { yPercent: -100, duration: 0.9, ease: 'expo.inOut' })
     .add(() => document.body.classList.remove('loading'))
-    .to({ v: 1 }, { v: 0.004, duration: 2.6, ease: 'power3.out', onUpdate() { hero.setT(this.targets()[0].v) } }, '-=0.5')
+    .to({ v: 1 }, { v: 0.0025, duration: 2.6, ease: 'power3.out', onUpdate() { hero.setT(this.targets()[0].v) } }, '-=0.5')
     .from('.hero-meta > div, .top', { y: 30, opacity: 0, stagger: 0.08, duration: 1, ease: 'expo.out' }, '-=2')
 })
 
