@@ -139,7 +139,7 @@ export function initLab() {
   }
 
   /* ---------- phases ---------- */
-  const DUR = { encode: 2.6, forward: 2.6, reverse: 6.5, decode: 2.2 }
+  const DUR = { encode: 2.6, forward: 1.3, reverse: 3.25, decode: 2.2 }
   const say = s => { info.textContent = s }
   const highlight = () => {}
   const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]

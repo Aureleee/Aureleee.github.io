@@ -46,7 +46,7 @@ if (!isTouch) {
 const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
-  let W, H, dpr, P = [], F = [], M = 0, rogue = null, caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
+  let W, H, dpr, P = [], F = [], M = 0, rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
   const mouse = { x: -1e4, y: -1e4 }
 
   function build() {
@@ -85,7 +85,8 @@ const hero = (() => {
     WB = { y0: y0 - band / 2 - lh * 0.2, h: band + lh * (lines.length - 1) * 0.4 }
     computeX(targets.length, y0)
     window.__heroTargets = targets
-    rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4] }
+    rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4], hit: 0 }
+    hunters = [{ x: -30, y: y0 - lh, vx: 0, vy: 0, cool: 2.5, side: 1 }, { x: W + 30, y: y0 + lh, vx: 0, vy: 0, cool: 3.4, side: -1 }]; shots = []; bursts = []
     F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
       x: Math.random() * W, s: 1 + Math.random() * 1.6,
       a: 0.18 + Math.random() * 0.45, acc: Math.random() < 0.12, ph: Math.random() * 10,
@@ -160,7 +161,55 @@ const hero = (() => {
       q.trail.forEach(([x, y], i) => { ctx.fillStyle = `rgba(200,255,0,${(i / q.trail.length) * 0.35})`; ctx.fillRect(x - 1.5, y - 1.5, 3, 3) })
       const pulse = 1 + 0.35 * Math.sin(time * 6)
       ctx.strokeStyle = 'rgba(200,255,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(q.x, q.y, 9 * pulse, 0, 7); ctx.stroke()
-      ctx.fillStyle = ACC; ctx.fillRect(q.x - 3, q.y - 3, 6, 6)
+      // two micro hunters chase the pixel and shoot at it, the pixel dodges
+      for (const s of shots) {
+        const rx = q.x - s.x, ry = q.y - s.y, dd = Math.hypot(rx, ry)
+        if (dd < 140 && rx * s.vx + ry * s.vy > 0) { const px = -s.vy, py = s.vx, n = Math.hypot(px, py), sg = Math.sign(rx * px + ry * py) || 1; q.vx += px / n * sg * 1500 * dt * (1 - dd / 140); q.vy += py / n * sg * 1500 * dt * (1 - dd / 140) }
+      }
+      for (const h of hunters) {
+        const dx2 = q.x - h.x, dy2 = q.y - h.y, dist = Math.hypot(dx2, dy2) + 1e-3, ux = dx2 / dist, uy = dy2 / dist
+        const want = W < 800 ? 90 : 150, pull = (dist - want) * 2.2
+        h.vx += (ux * pull - uy * h.side * 90) * dt; h.vy += (uy * pull + ux * h.side * 90) * dt
+        h.vx *= Math.pow(0.3, dt); h.vy *= Math.pow(0.3, dt)
+        const sp = Math.hypot(h.vx, h.vy); if (sp > 230) { h.vx *= 230 / sp; h.vy *= 230 / sp }
+        h.x += h.vx * dt; h.y += h.vy * dt
+        h.cool -= dt
+        if (h.cool <= 0 && dist < 420) {
+          const v = 430, tt2 = dist / v, ax = q.x + q.vx * tt2 * 0.8 - h.x, ay = q.y + q.vy * tt2 * 0.8 - h.y, an = Math.hypot(ax, ay) + 1e-3
+          shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 1.4 })
+          h.cool = 0.8 + Math.random() * 0.9
+        }
+        const ang = Math.atan2(uy, ux)
+        ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(ang)
+        ctx.strokeStyle = 'rgba(241,239,233,.9)'; ctx.lineWidth = 1.3
+        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-3, 0); ctx.lineTo(-6, 5); ctx.closePath(); ctx.stroke()
+        ctx.fillStyle = `rgba(255,120,60,${0.5 + 0.5 * Math.sin(time * 30 + h.side)})`; ctx.fillRect(-8, -1, 2.5, 2)
+        ctx.restore()
+      }
+      shots = shots.filter(s => {
+        s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt
+        // blasts shove the particles of the name they fly through
+        for (const p of P) {
+          const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - (p.ty + p.oy)
+          if (dxp * dxp + dyp * dyp < 500) { p.vx -= dxp * 0.25 + s.vx * 0.012; p.vy -= dyp * 0.25 + s.vy * 0.012 }
+        }
+        if (Math.hypot(s.x - q.x, s.y - q.y) < 8) {
+          q.hit = 0.35; q.vx += s.vx * 0.9; q.vy += s.vy * 0.9
+          for (let k = 0; k < 14; k++) { const a2 = Math.random() * 7, v2 = 60 + Math.random() * 160; bursts.push({ x: q.x, y: q.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.5 }) }
+          return false
+        }
+        const n = Math.hypot(s.vx, s.vy)
+        ctx.strokeStyle = 'rgba(255,140,90,.95)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.vx / n * 9, s.y - s.vy / n * 9); ctx.stroke()
+        return s.life > 0 && s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 20
+      })
+      bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; ctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; ctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
+      q.hit = Math.max(0, q.hit - dt)
+      ctx.fillStyle = q.hit > 0 && Math.floor(time * 30) % 2 ? '#ffffff' : ACC; ctx.fillRect(q.x - 3, q.y - 3, 6, 6)
+      // tiny hint: shown for a few seconds, then only when the cursor gets close
+      q.h0 = q.h0 ?? time
+      const near = Math.hypot(q.x - mouse.x, q.y - mouse.y)
+      const ha = Math.max(Math.max(0, 1 - (time - q.h0 - 6) / 2) * Math.min(1, (time - q.h0) / 1), near < 280 ? 1 - near / 280 : 0) * 0.7
+      if (ha > 0.02) { ctx.font = '11px JetBrains Mono'; ctx.fillStyle = `rgba(200,255,0,${ha})`; ctx.fillText('catch me', q.x + 12, q.y - 10) }
       cv.style.cursor = Math.hypot(q.x - mouse.x, q.y - mouse.y) < 26 ? 'pointer' : ''
     }
   }
@@ -225,17 +274,15 @@ gsap.fromTo('.about-photo img', { yPercent: -10 }, {
 })
 gsap.from('.about .sub', { y: 40, opacity: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: '.about .sub', start: 'top 85%' } })
 
-/* ---------- work: horizontal pinned scroll ---------- */
-const track = document.querySelector('.work-track')
+/* ---------- work: stacking cards ---------- */
+const cards = [...document.querySelectorAll('.proj')]
 const wp = document.getElementById('wp')
-const dist = () => track.scrollWidth - innerWidth
-gsap.to(track, {
-  x: () => -dist(), ease: 'none',
-  scrollTrigger: {
-    trigger: '.work', pin: '.work-pin', start: 'top top', end: () => '+=' + dist(), scrub: 1, invalidateOnRefresh: true,
-    onUpdate: s => { wp.textContent = '0' + Math.min(3, 1 + Math.floor(s.progress * 3)); window.__workProgress = s.progress },
-    onRefresh: s => { window.__workStart = s.start; window.__workEnd = s.end },
-  },
+cards.forEach((card, i) => {
+  card.style.setProperty('--i', i)
+  gsap.from(card, { y: 120, rotate: i % 2 ? 1.5 : -1.5, opacity: 0, duration: 1.1, ease: 'expo.out', scrollTrigger: { trigger: card, start: 'top 92%' } })
+  ScrollTrigger.create({ trigger: card, start: 'top 60%', onEnter: () => { wp.textContent = '0' + (i + 1) }, onLeaveBack: () => { wp.textContent = '0' + Math.max(1, i) } })
+  const next = cards[i + 1]
+  if (next) gsap.to(card, { scale: 0.92, filter: 'brightness(0.55)', ease: 'none', scrollTrigger: { trigger: next, start: 'top 65%', end: 'top 15%', scrub: true } })
 })
 
 initCards()

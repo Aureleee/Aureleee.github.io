@@ -199,6 +199,7 @@ function thales(cv) {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-camX, -camY)
     ctx.drawImage(bg, 0, 0, W, H)
+    window.__thales = { p, cx: c.cx, cy: c.cy, R: Math.max(c.bb[2] - c.bb[0], c.bb[3] - c.bb[1]) * 0.85, pts: c.pts, camX, camY, z, W, H, el: cv }
     if (patch && z > 1.2) { ctx.globalAlpha = Math.min(1, (z - 1.2) / 0.8); ctx.drawImage(patch.c, ...patch.r); ctx.globalAlpha = 1 }
     for (const t of placed) {
       drawTank(t.boxes, 'rgba(241,239,233,.9)', 1.3 / z)
@@ -215,9 +216,6 @@ function thales(cv) {
       const m = ease(seg(p, 0.42, 0.64)), a = Math.sin(m * Math.PI / 2), b = Math.cos(m * Math.PI / 2)
       ctx.strokeStyle = 'rgba(200,255,0,.45)'; ctx.setLineDash([4 / z, 4 / z]); ctx.lineWidth = 1.4 / z
       ell(R); ctx.stroke(); ctx.setLineDash([])
-      ctx.fillStyle = m > 0.9 ? 'rgba(241,239,233,.95)' : ACC
-      const sz = 1.6 / z
-      for (const q of c.pts) ctx.fillRect(c.cx + a * (q.x - c.cx) + b * q.ex * R * 0.45, c.cy + a * (q.y - c.cy) + b * q.ey * R * 0.3, sz, sz)
     }
     if (p >= 0.64) {
       drawTank(c.boxes, 'rgba(241,239,233,.95)', 1.3 / z)
@@ -258,6 +256,7 @@ function retina(cv) {
   let W = 0, H = 0, L = null
   const glow = {}
   let parts = [], clock = 0
+  const slots = new Array(400).fill(null)
   const bars = [3, 4, 5, 6, 7].map(() => [0.3 + Math.random() * 0.7, 0.2 + Math.random() * 0.5, 0.1 + Math.random() * 0.4])
 
   function layout() {
@@ -281,6 +280,7 @@ function retina(cv) {
       add(4, [[xb + q, y], [xbus, y], [xbus, out[1]], [out[0] + W * 0.06, out[1]]], 'OUT')
     }
     L = { C, P, paths, inp, out, xl, xr, xc, xb, xbus, q }
+    window.__retina = { el: cv, W: () => W, inp: () => L.inp, slot: i => { const pt = slots[i]; return pt ? at(pt.p, pt.d) : null } }
   }
   const st = sized(cv, ({ w, h }) => { W = w; H = h; layout() })
 
@@ -312,7 +312,7 @@ function retina(cv) {
     const centers = [0.1, 0.3, 0.45, 0.62, 0.78]
     for (const p of L.paths) {
       const rate = Math.max(0, 1 - Math.abs(ph - centers[p.group]) / 0.12) * (p.group === 4 ? 10 : 26)
-      if (Math.random() < rate * dt) parts.push({ p, d: 0, v: H * (0.5 + Math.random() * 0.25) })
+      if (Math.random() < rate * dt) { const sl = slots.indexOf(null); const pt = { p, d: 0, v: H * (0.5 + Math.random() * 0.25), slot: sl }; if (sl >= 0) slots[sl] = pt; parts.push(pt) }
     }
     for (const k in glow) glow[k] *= Math.exp(-dt * (k === 'OUT' ? 0.9 : 2.2))
 
@@ -365,11 +365,8 @@ function retina(cv) {
       if (pt.d >= pt.p.len) {
         const e = pt.p.end; glow[e] = Math.min(1, (glow[e] || 0) + (e === 'OUT' ? 0.2 : 0.12))
         if (e[0] === 'S') glow['P' + e[1]] = Math.min(1, (glow['P' + e[1]] || 0) + 0.08)
+        if (pt.slot >= 0) slots[pt.slot] = null
         return false
-      }
-      for (let k = 3; k >= 0; k--) {
-        const [x, y] = at(pt.p, Math.max(0, pt.d - k * 7))
-        ctx.fillStyle = k ? `rgba(200,255,0,${0.18 * (4 - k)})` : ACC; ctx.fillRect(x - 2, y - 2, 4, 4)
       }
       return true
     })
