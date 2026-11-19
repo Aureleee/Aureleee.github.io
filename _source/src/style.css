@@ -78,7 +78,10 @@ body::after {
 .about-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .about-text h2 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 4vw, 62px); line-height: 1.08; letter-spacing: -.02em; }
 .about-text h2 .w { opacity: .12; display: inline-block; }
-.about-text .sub { margin-top: 36px; color: var(--dim); max-width: 520px; font-size: 18px; }
+.about-links { margin-top: 26px; display: flex; gap: 26px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+.about-links a { color: var(--fg); text-decoration: none; padding-bottom: 3px; background: linear-gradient(var(--acc), var(--acc)) 0 100% / 0% 1px no-repeat; transition: background-size .35s ease, color .25s; }
+.about-links a:hover { color: var(--acc); background-size: 100% 1px; }
+.about-text .sub { margin-top: 28px; color: var(--dim); max-width: 520px; font-size: 18px; }
 
 /* marquee */
 .marquee { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 22px 0; overflow: hidden; background: var(--acc); color: var(--bg); }
