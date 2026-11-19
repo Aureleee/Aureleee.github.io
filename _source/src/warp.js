@@ -186,7 +186,7 @@ export function initWarp(lenis) {
     const MASS = 0xff2878ff                               // the pixels you feed it: orange (ABGR)
     let phase = 'eat', tPhase = 0, density = 0, shake = 0, rb = null, spinKick = 0, lastY = scrollY, yR = 0
     const free = [], orb = []                              // free: loose pixels (x, y), orb: pixels in the disk (r, a)
-    const mouse = { x: -1e4, y: -1e4, down: false, t0: 0, acc: 0 }
+    const mouse = { x: -1e4, y: -1e4, down: false, auto: false, t0: 0, acc: 0 }
 
     // loose pixels: pulled toward the centre, kicked around, never quite falling in
     const kickFree = (p, dt, G) => {
@@ -210,10 +210,17 @@ export function initWarp(lenis) {
     cv.addEventListener('pointerdown', e => {
       e.stopPropagation(); mouse.x = e.clientX; mouse.y = e.clientY
       if (phase !== 'idle') return
-      mouse.down = true; mouse.t0 = performance.now(); mouse.acc = 0
+      if (!mouse.auto) { mouse.down = true; mouse.t0 = performance.now(); mouse.acc = 0 }
       feed(22, 'tap')
     })
-    const release = () => { mouse.down = false }
+    const release = () => { if (!mouse.auto) mouse.down = false }
+    // double click: the stream feeds itself, as if the button stayed down
+    cv.addEventListener('dblclick', e => {
+      e.stopPropagation()
+      if (phase !== 'idle') return
+      mouse.auto = true; mouse.down = true
+      if (!mouse.t0 || performance.now() - mouse.t0 > 600) mouse.t0 = performance.now()
+    })
     cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release); cv.addEventListener('pointerleave', release)
 
     const proj = (r, a) => [hx + Math.cos(a) * r, hy + Math.sin(a) * r * TILT]
@@ -318,7 +325,7 @@ export function initWarp(lenis) {
         const pct = Math.min(99, Math.floor(100 * density / DC))   // a very discreet readout
         g.fillStyle = FGs + (0.3 * smooth(1, 2, u)).toFixed(3) + ')'
         g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'center'
-        g.fillText(density ? `MASS ${String(pct).padStart(2, '0')}%` : 'HOLD TO FEED', hx, hy + R0 * 5)
+        g.fillText(density ? `MASS ${String(pct).padStart(2, '0')}%` : 'HOLD OR DOUBLE-CLICK TO FEED', hx, hy + R0 * 5)
         if (density >= DC) { phase = 'collapse'; tPhase = t; mouse.down = false }
       } else if (phase === 'collapse') {
         // critical mass: it shrinks, gathers power, trembles harder and harder
