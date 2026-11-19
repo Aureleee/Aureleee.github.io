@@ -129,7 +129,13 @@ export function initGame({ lenis }) {
 
   function startLevel(n) {
     S.level = n; S.phase = 'play'; S.lt = 0
-    S.spawnQ = LEVELS[n - 1].waves.flatMap(([t, type, count, extra = 0, gap]) => Array.from({ length: count }, (_, k) => ({ t: t + k * (gap ?? (TYPES[type].boss ? 0 : 0.5)), type, extra }))).sort((a, b) => a.t - b.t)
+    // from level 3 on, the waves get much bigger: by then the cannon is strong, the noise has to be a flood
+    const flood = n >= 3 ? 1.6 + 0.7 * (n - 3) : 1
+    S.spawnQ = LEVELS[n - 1].waves.flatMap(([t, type, count, extra = 0, gap]) => {
+      const big = TYPES[type].boss, c = big ? count : Math.round(count * flood), gp = (gap ?? (big ? 0 : 0.5)) / (big ? 1 : Math.sqrt(flood))
+      return Array.from({ length: c }, (_, k) => ({ t: t + k * gp, type, extra }))
+    }).sort((a, b) => a.t - b.t)
+    S.trickle = n >= 3 ? 1.3 - 0.25 * (n - 3) : 0; S.trickT = 0
     panel.classList.remove('on')
     say(`LEVEL ${n}`, LEVELS[n - 1].name)
     updHud()
@@ -338,6 +344,8 @@ export function initGame({ lenis }) {
       if (playing) {
         S.lt += dt
         while (S.spawnQ.length && S.spawnQ[0].t <= S.lt) { const q = S.spawnQ.shift(); spawn(q.type, q.extra) }
+        // a steady trickle of noise on top of the waves, as long as waves are still coming
+        if (S.trickle && S.spawnQ.length) { S.trickT += dt; if (S.trickT > S.trickle) { S.trickT = 0; spawn(Math.random() < 0.6 ? 'swarm' : 'zig') } }
         if (!S.spawnQ.length && !S.enemies.length && !S.pend.length) levelCleared()
       }
       // dots gathering where an enemy is about to appear

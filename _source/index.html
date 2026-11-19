@@ -159,11 +159,11 @@
     <h2 class="big-title"><span class="line">Inside a</span><span class="line outline">diffusion model</span></h2>
     <div class="dmx">
       <div class="dmx-top">
-        <p class="dm-info" id="dm-info">A latent diffusion model, step by step.</p>
+        <label class="dm-prompt"><span class="mono">prompt</span><input id="dm-prompt" type="text" spellcheck="false" autocomplete="off" value="add a motivated, friendly engineer who loves diffusion and flow matching" /></label>
         <button class="dm-btn" id="dm-run" data-hover><i>⏵</i><span>Run diffusion</span></button>
       </div>
       <canvas id="dm"></canvas>
-      <p class="dm-note mono">Forward noising and the DDIM-style reverse path use the real formulas. The denoiser is simulated: its guess of z₀ is a blurred z₀ that sharpens as t → 0.</p>
+      <p class="dm-note mono">The prompt is embedded into a context vector c that conditions every denoising step. Noising and the reverse path use the real formulas; the denoiser itself is simulated.</p>
     </div>
   </section>
 

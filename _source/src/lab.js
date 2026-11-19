@@ -1,7 +1,7 @@
 import gsap from 'gsap'
 
 /*
-  Toy latent diffusion, played as one continuous 60 fps sequence:
+  Toy latent diffusion inpainting, conditioned on a prompt, played as one continuous 60 fps sequence:
   encode (pixels fly into the latent) → forward noise, cell by cell → reverse, t sliding
   continuously from 1000 to 0 → decode.
   Forward / reverse use z_t = √ᾱ ẑ0 + √(1−ᾱ) ε with a fixed ε. The "network" is an oracle
@@ -31,28 +31,47 @@ const cmapRGB = v => { const i = cmapIdx(v); return [LUT[i] / 255, LUT[i + 1] / 
 
 export function initLab() {
   const cv = document.getElementById('dm'), ctx = cv.getContext('2d')
-  const runBtn = document.getElementById('dm-run'), info = document.getElementById('dm-info')
+  const runBtn = document.getElementById('dm-run'), promptEl = document.getElementById('dm-prompt')
 
   let W = 0, H = 0, lay = null
   let hiRes = null, pyr = [], noiseTex = null, x = null, z0 = null, eps = null, blurs = [], cellR = null
   let zt = null, z2 = null, stream = [], emitAcc = 0, t = 0, phase = 'idle', pt = 0, parts = [], cellArrive = null
   let sparks = [], ripples = [], film = [], nextShot = 1, rippleT = 0
   let visible = false, autoplayed = false, scrubbing = false
+  let zS = null, mask = null, maskTint = null, ctxVec = [], pulses = []
 
   /* ---------- data ---------- */
-  const photo = new Image(); photo.src = 'lab.jpg'
-  function loadImage() {
-    hiRes = document.createElement('canvas'); hiRes.width = hiRes.height = 512
-    hiRes.getContext('2d').drawImage(photo, 0, 0, 512, 512)
-    // image pyramid: continuous blur = cross-fade between two levels (works in every browser)
-    pyr = [hiRes]
-    for (let n = 256; n >= 4; n /= 2) { const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(pyr[pyr.length - 1], 0, 0, n, n); pyr.push(c) }
+  const photo = new Image(); photo.src = 'lab.jpg'            // the result: the scene with me painted in
+  const srcImg = new Image(); srcImg.src = 'lab-src.jpg'      // the input: the scene alone
+  const maskImg = new Image(); maskImg.src = 'lab-mask.png'   // where to paint
+  const ready = () => [photo, srcImg, maskImg].every(i => i.complete && i.naturalWidth)
+  const pixels = img => {
     const sm = document.createElement('canvas'); sm.width = sm.height = S
-    sm.getContext('2d').drawImage(hiRes, 0, 0, S, S)
-    const d = sm.getContext('2d').getImageData(0, 0, S, S).data
-    x = new Float32Array(S * S * 3)
-    for (let i = 0; i < S * S; i++) for (let k = 0; k < 3; k++) x[3 * i + k] = d[4 * i + k] / 255
-    z0 = encode(x); eps = Float32Array.from(z0, () => randn()); zt = z0.slice(); z2 = z0.slice()
+    sm.getContext('2d').drawImage(img, 0, 0, S, S)
+    const d = sm.getContext('2d').getImageData(0, 0, S, S).data, out = new Float32Array(S * S * 3)
+    for (let i = 0; i < S * S; i++) for (let k = 0; k < 3; k++) out[3 * i + k] = d[4 * i + k] / 255
+    return out
+  }
+  function loadImage() {
+    if (!ready() || z0) return
+    const tgtHi = document.createElement('canvas'); tgtHi.width = tgtHi.height = 512
+    tgtHi.getContext('2d').drawImage(photo, 0, 0, 512, 512)
+    hiRes = document.createElement('canvas'); hiRes.width = hiRes.height = 512
+    hiRes.getContext('2d').drawImage(srcImg, 0, 0, 512, 512)
+    // the mask, in latent cells, and a lime tint of it to show on the input
+    const mc = document.createElement('canvas'); mc.width = mc.height = L; mc.getContext('2d').drawImage(maskImg, 0, 0, L, L)
+    const md = mc.getContext('2d').getImageData(0, 0, L, L).data
+    mask = Float32Array.from({ length: L * L }, (_, i) => md[4 * i] / 255)
+    maskTint = document.createElement('canvas'); maskTint.width = maskTint.height = 256
+    const tg = maskTint.getContext('2d'); tg.drawImage(maskImg, 0, 0, 256, 256)
+    const td = tg.getImageData(0, 0, 256, 256)
+    for (let i = 0; i < 256 * 256; i++) { const a = td.data[4 * i]; td.data[4 * i] = 200; td.data[4 * i + 1] = 255; td.data[4 * i + 2] = 0; td.data[4 * i + 3] = a * 0.32 }
+    tg.putImageData(td, 0, 0)
+    // image pyramid of the result: continuous blur = cross-fade between two levels
+    pyr = [tgtHi]
+    for (let n = 256; n >= 4; n /= 2) { const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(pyr[pyr.length - 1], 0, 0, n, n); pyr.push(c) }
+    x = pixels(srcImg)
+    zS = encode(x); z0 = encode(pixels(photo)); eps = Float32Array.from(z0, () => randn()); zt = z0.slice(); z2 = z0.slice()
     blurs = Array.from({ length: 8 }, (_, r) => blur(z0, r))
     cellR = Float32Array.from({ length: L * L }, () => Math.random())
     noiseTex = document.createElement('canvas'); noiseTex.width = noiseTex.height = 96
@@ -90,13 +109,17 @@ export function initLab() {
     return out
   }
   const DT = 0.05
-  const stateAt = (tt, out) => { const a = Math.sqrt(alphaBar(tt)), b = tt <= 0 ? 0 : Math.sqrt(1 - alphaBar(tt)), g = guess(tt); for (let i = 0; i < out.length; i++) out[i] = a * g[i] + b * eps[i] }
+  // reverse: inside the mask the denoiser paints toward the prompt; outside, the known latent is kept
+  const stateAt = (tt, out) => {
+    const a = Math.sqrt(alphaBar(tt)), b = tt <= 0 ? 0 : Math.sqrt(1 - alphaBar(tt)), g = guess(tt)
+    for (let i = 0; i < out.length; i++) { const m = mask[(i / 3) | 0]; out[i] = m * (a * g[i] + b * eps[i]) + (1 - m) * (tt <= 0 ? g[i] : zS[i]) }
+  }
   const reverseState = tt => { t = tt; stateAt(t, zt) }
   const forwardState = tau => {
     t = tau
     for (let c = 0; c < L * L; c++) {
       const ti = easeIO(clamp01((tau - 0.55 * cellR[c]) / 0.45)), a = Math.sqrt(alphaBar(ti)), b = Math.sqrt(1 - alphaBar(ti))
-      for (let k = 0; k < 3; k++) zt[3 * c + k] = a * z0[3 * c + k] + b * eps[3 * c + k]
+      for (let k = 0; k < 3; k++) { const o = 3 * c + k; zt[o] = mask[c] * (a * zS[o] + b * eps[o]) + (1 - mask[c]) * zS[o] }
     }
   }
   const latCs = [0, 1].map(() => Object.assign(document.createElement('canvas'), { width: L, height: L }))
@@ -141,19 +164,14 @@ export function initLab() {
   /* ---------- phases ---------- */
   const DUR = { encode: 2.6, forward: 1.3, reverse: 3.25, decode: 2.2 }
   let sayT = 0
-  const say = s => {
-    if (info.dataset.msg === s) return
-    info.dataset.msg = s; clearTimeout(sayT)
-    info.classList.add('out')
-    sayT = setTimeout(() => { info.textContent = s; info.classList.remove('out') }, 280)
-  }
+  const say = () => { void sayT }
   const highlight = () => {}
   const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]
   const fly = (sx, sy, ex, ey, delay, fl, c0, c1, s0, s1) => { const bend = (Math.random() - 0.5) * W * 0.12; return { sx, sy, ex, ey, cx: (sx + ex) / 2 + bend * 0.3, cy: (sy + ey) / 2 + bend, delay, fl, c0, c1, s0, s1 } }
 
   function start() {
     if (!z0) return
-    zt.set(z0); z2.set(z0); stream = []; t = 0; film = []; ripples = []; sparks = []; nextShot = 1.05; scrubbing = false
+    zt.set(zS); z2.set(zS); stream = []; pulses = []; embed(); t = 0; film = []; ripples = []; sparks = []; nextShot = 1.05; scrubbing = false
     phase = 'encode'; pt = 0; highlight(0); runBtn.disabled = true
     say('Encode. The image drops into a latent 16× smaller.')
     const [ix, iy, P] = lay.img, [lx, ly, Pz] = lay.lat
@@ -162,7 +180,7 @@ export function initLab() {
       const q = 3 * ((j * 2) * S + i * 2), c = (j >> 1) * L + (i >> 1)
       const delay = (i / G) * 0.9 + (j / G) * 0.35 + Math.random() * 0.25, fl = 0.85 + Math.random() * 0.3
       parts.push(fly(ix + (i + 0.5) * P / G, iy + (j + 0.5) * P / G, lx + ((i >> 1) + 0.25 + 0.5 * (i & 1)) * Pz / L, ly + ((j >> 1) + 0.25 + 0.5 * (j & 1)) * Pz / L,
-        delay, fl, [x[q], x[q + 1], x[q + 2]], cmapRGB(z0[3 * c]), P / G, Pz / L * 0.5))
+        delay, fl, [x[q], x[q + 1], x[q + 2]], cmapRGB(zS[3 * c]), P / G, Pz / L * 0.5))
       cellArrive[c] = Math.max(cellArrive[c], delay + fl)
     }
   }
@@ -187,12 +205,11 @@ export function initLab() {
       say('Forward. Noise until nothing is left.')
     } else if (phase === 'forward') {
       const tau = clamp01(pt / DUR.forward); forwardState(tau)
-      if (tau < 0.95) for (let k = 0; k < 1; k++) { const c = Math.floor(Math.random() * L * L); sparks.push({ x: lx + (c % L + 0.5) * Pz / L, y: ly - Pz * 0.35, ty: ly + (Math.floor(c / L) + 0.5) * Pz / L, v: Pz * 1.6 }) }
       if (pt > DUR.forward) { reverseState(1); z2.set(zt); phase = 'reverse'; pt = 0; highlight(2); say('Reverse. Denoise from z_T, one step at a time.') }
     } else if (phase === 'reverse') {
       const k = clamp01(pt / DUR.reverse)
       reverseState(1 - easeIO(k) * 0.35 - k * 0.65)
-      rippleT += dt; if (rippleT > 0.3) { rippleT = 0; const [mx, my, mP] = lay.lat2; ripples.push({ x: mx + mP / 2, y: my + mP / 2, r: mP * 0.1, a: 0.45 }) }
+      rippleT += dt; if (rippleT > 0.3) { rippleT = 0; pulses.push({ k: 0 }); const [mx, my, mP] = lay.lat2; ripples.push({ x: mx + mP / 2, y: my + mP / 2, r: mP * 0.1, a: 0.45 }) }
       // the denoising step lives in latent space: cells of z_t travel to z_{t-Δ}, crossing paths
       emitAcc += dt * 700
       const [ax, ay, aP] = lay.lat, [bx, by, bP] = lay.lat2
@@ -207,11 +224,12 @@ export function initLab() {
       if (k >= 1) { reverseState(0); startDecode() }
     } else if (phase === 'decode' && pt > DUR.decode + 0.6) {
       phase = 'done'; highlight(-1); runBtn.disabled = false; runBtn.querySelector('span').textContent = 'Replay'
-      say('Drag the timeline to scrub t.')
+
     }
     stream = stream.filter(p => (p.k += dt / p.fl) < 1)
     sparks = sparks.filter(s => { s.y += s.v * dt; return s.y < s.ty })
     ripples = ripples.filter(r => (r.r += Pz * 0.45 * dt, r.a -= dt * 0.55) > 0)
+    pulses = pulses.filter(q => (q.k += dt / 0.45) < 1)
   }
 
   /* ---------- drawing ---------- */
@@ -289,6 +307,44 @@ export function initLab() {
     ctx.globalAlpha = 1
   }
 
+  // the prompt, embedded: a toy text encoder (a hash of each word) gives a 24-d context vector c
+  function embed() {
+    const words = (promptEl?.value || '').toLowerCase().split(/\s+/).filter(Boolean)
+    ctxVec = Array.from({ length: 24 }, (_, i) => {
+      let v = 0
+      words.forEach((w, j) => { let h = 2166136261 ^ i; for (const ch of w) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); v += ((h >>> 0) % 1000) / 500 - 1 + 0.15 * Math.sin(j + i) })
+      return Math.tanh(v / Math.max(1, Math.sqrt(words.length)) * 1.6)
+    })
+  }
+  function context() {
+    if (!ctxVec.length) embed()
+    const { lat, lat2 } = lay, fs = lay.fs, rev = phase === 'reverse'
+    const gx0 = lat[0] + lat[2], gx1 = lat2[0], cw = Math.min((gx1 - gx0) * 0.62, lat[2] * 0.95), cx = (gx0 + gx1) / 2
+    const cell = cw / 12, y0 = lat[1] - cell * 0.6, x0 = cx - cw / 2
+    ctx.font = `${fs * 0.85}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = rev ? ACC : '#6a6a64'
+    ctx.fillText('c = E(prompt)', cx, y0 - fs * 0.7)
+    for (let i = 0; i < 24; i++) {
+      const v = ctxVec[i], k = cmapIdx(v * 1.1)
+      ctx.globalAlpha = rev ? 0.95 : 0.6
+      ctx.fillStyle = `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`
+      ctx.fillRect(x0 + (i % 12) * cell + 1, y0 + Math.floor(i / 12) * cell + 1, cell - 2, cell - 2)
+    }
+    ctx.globalAlpha = 1
+    // it conditions every step: a line into the loop, and a pulse per step
+    const sx = cx, sy = y0 + cell * 2 + 4, ex = lat2[0] + lat2[2] * 0.5, ey = lat2[1] + lat2[2] + fs * 2.2
+    ctx.strokeStyle = rev ? 'rgba(200,255,0,.55)' : '#2e2e2c'; ctx.lineWidth = 1; ctx.setLineDash([2, 5])
+    const c1x = sx, c1y = ey + fs * 1.2, c2x = ex - lat2[2] * 0.4, c2y = ey + fs * 1.5
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex - lat2[2] * 0.2, ey); ctx.stroke(); ctx.setLineDash([])
+    for (const q of pulses) {
+      const u = easeIO(q.k), w = 1 - u
+      const px = w * w * w * sx + 3 * w * w * u * c1x + 3 * w * u * u * c2x + u * u * u * (ex - lat2[2] * 0.2)
+      const py = w * w * w * sy + 3 * w * w * u * c1y + 3 * w * u * u * c2y + u * u * u * ey
+      ctx.fillStyle = ACC; ctx.globalAlpha = Math.sin(q.k * Math.PI); ctx.fillRect(px - 2, py - 2, 4, 4); ctx.globalAlpha = 1
+    }
+    if (rev) { ctx.fillStyle = '#6a6a64'; ctx.fillText('cross-attention', (sx + ex) / 2, ey + fs * 2.4) }
+    ctx.textAlign = 'left'
+  }
+
   function draw() {
     ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, W, H)
     const { img, lat, lat2, out } = lay
@@ -302,13 +358,14 @@ export function initLab() {
     frame(out, 'x̂ = D(z₀)', phase === 'reverse' ? 'waits for t = 0' : 'decoded pixels', phase === 'decode' || phase === 'done')
     if (hiRes) {
       const fade = phase === 'encode' ? 1 - clamp01((pt - 0.2) / 1.8) : phase === 'idle' || phase === 'done' ? 1 : 0.25
-      ctx.globalAlpha = Math.max(0.12, fade); ctx.drawImage(hiRes, img[0], img[1], img[2], img[2]); ctx.globalAlpha = 1
+      ctx.globalAlpha = Math.max(0.12, fade); ctx.drawImage(hiRes, img[0], img[1], img[2], img[2])
+      ctx.globalAlpha = 1
     }
     ctx.imageSmoothingEnabled = false
     if (latentOn && z0) {
       let rv = null
       if (phase === 'encode') { rv = new Float32Array(L * L); for (let i = 0; i < L * L; i++) rv[i] = clamp01((pt - cellArrive[i]) / 0.25) }
-      ctx.drawImage(latentCanvas(phase === 'encode' ? z0 : phase === 'forward' ? zt : z2, rv, 0), lat[0], lat[1], lat[2], lat[2])
+      ctx.drawImage(latentCanvas(phase === 'encode' || phase === 'idle' ? zS : phase === 'forward' ? zt : z2, rv, 0), lat[0], lat[1], lat[2], lat[2])
     }
     if (z0 && (rev || phase === 'decode' || phase === 'done')) {
       ctx.globalAlpha = rev ? clamp01(pt / 0.6) : 1
@@ -317,11 +374,10 @@ export function initLab() {
     ctx.imageSmoothingEnabled = true
     if (phase === 'decode') { const k = clamp01((pt - 1.3) / 0.9); if (k > 0) drawDecoded(out, 0, k) }
     else if (phase === 'done') drawDecoded(out, 0)
-    for (const s of sparks) { ctx.fillStyle = ACC; ctx.fillRect(s.x - 1, s.y, 2, 5) }
     for (const r of ripples) { ctx.strokeStyle = `rgba(200,255,0,${r.a})`; ctx.lineWidth = 1.2; ctx.strokeRect(r.x - r.r, r.y - r.r, 2 * r.r, 2 * r.r) }
     if (rev) drawStream()
     if (phase === 'encode' || phase === 'decode') drawParticles(pt)
-    timeline(); filmstrip()
+    context(); timeline(); filmstrip()
     if (phase === 'idle') { ctx.font = `${lay.fs}px JetBrains Mono`; ctx.fillStyle = '#6a6a64'; ctx.textAlign = 'center'; ctx.fillText('press run', lat[0] + lat[2] / 2, lat[1] + lat[2] / 2); ctx.textAlign = 'left' }
   }
 
@@ -329,8 +385,10 @@ export function initLab() {
   layout()
   let lastW = cv.clientWidth
   addEventListener('resize', () => { if (cv.clientWidth === lastW) return; lastW = cv.clientWidth; layout(); if (phase === 'encode') start(); else if (phase === 'decode') startDecode() })
-  photo.onload = () => { loadImage(); draw() }
-  if (photo.complete && photo.naturalWidth) loadImage()
+  for (const im of [photo, srcImg, maskImg]) im.addEventListener('load', () => { loadImage(); if (ready()) { draw(); if (visible && !autoplayed && z0) { autoplayed = true; setTimeout(start, 400) } } })
+  loadImage()
+  promptEl?.addEventListener('keydown', e => { if (e.key === 'Enter' && !runBtn.disabled) { e.preventDefault(); start() } })
+  promptEl?.addEventListener('input', () => embed())
   runBtn.onclick = start
   new IntersectionObserver(es => es.forEach(e => {
     visible = e.isIntersecting
@@ -338,15 +396,6 @@ export function initLab() {
   }), { threshold: 0.45 }).observe(cv)
   gsap.ticker.add((_, dt) => { if (!visible || !lay) return; if (z0 && phase !== 'idle' && phase !== 'done') update(Math.min(dt, 50) / 1000); draw() })
 
-  const scrub = e => { const r = cv.getBoundingClientRect(), xx = (e.clientX - r.left) * W / r.width, [x0, , w] = lay.tl; reverseState(clamp01((xx - x0) / w)); scrubbing = t > 0.001 }
-  cv.addEventListener('pointerdown', e => {
-    if (phase !== 'done') return
-    const r = cv.getBoundingClientRect(), yy = (e.clientY - r.top) * H / r.height
-    if (Math.abs(yy - lay.tl[1]) > lay.fs * 3) return
-    cv.setPointerCapture(e.pointerId); scrub(e)
-    const mv = ev => scrub(ev), up = () => { cv.removeEventListener('pointermove', mv); cv.removeEventListener('pointerup', up) }
-    cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up)
-  })
   window.__dm = () => ({ phase, pt, t })
   window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k) } }
 }

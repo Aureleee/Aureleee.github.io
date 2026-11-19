@@ -190,7 +190,9 @@ export function initFlow() {
     const st5 = p => {
       if (!lab) return [dr.left + dr.width / 2, dr.top]
       const [lx, ly, lp] = lab.lat
-      return [dr.left + lx + lp / 2 + p.e1 * lp * 0.45, dr.top + ly - lp * 0.45 + p.e2 * lp * 0.14 + Math.sin(time * 2 + p.i) * 3]
+      // the points circle the latent, waiting to become its noise
+      const a = p.u * Math.PI * 2 + time * (0.35 + 0.25 * p.r), rr = lp * (0.62 + 0.22 * p.v) + Math.sin(time * 1.3 + p.i) * 3
+      return [dr.left + lx + lp / 2 + Math.cos(a) * rr, dr.top + ly + lp / 2 + Math.sin(a) * rr * 0.85]
     }
     const cell = p => { const [lx, ly, lp] = lab.lat, c = p.hk % (32 * 32); return [dr.left + lx + ((c % 32) + 0.5) * lp / 32, dr.top + ly + (Math.floor(c / 32) + 0.5) * lp / 32] }
 
