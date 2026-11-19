@@ -314,9 +314,6 @@ gsap.to('.about-photo', {
   clipPath: 'inset(0% 0 0 0)', duration: 1.4, ease: 'expo.inOut',
   scrollTrigger: { trigger: '.about', start: 'top 70%' },
 })
-gsap.fromTo('.about-photo img', { yPercent: -10 }, {
-  yPercent: 0, ease: 'none', scrollTrigger: { trigger: '.about', start: 'top bottom', end: 'bottom top', scrub: true },
-})
 gsap.from('.about .sub', { y: 40, opacity: 0, duration: 1, ease: 'expo.out', scrollTrigger: { trigger: '.about .sub', start: 'top 85%' } })
 
 /* ---------- work: stacking cards ---------- */
@@ -359,3 +356,31 @@ document.getElementById('yr').textContent = new Date().getFullYear()
 const clock = document.getElementById('clock')
 const tick = () => { clock.textContent = 'Paris ' + new Date().toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }) }
 tick(); setInterval(tick, 10000)
+
+/* ---------- marquee: speed button + hold to brake ---------- */
+;(() => {
+  const mq = document.querySelector('.marquee'), track = mq?.querySelector('.marquee-track'), btn = mq?.querySelector('.mq-speed')
+  if (!mq || !track || !btn) return
+  const label = btn.querySelector('.mq-x')
+  let x = 0, mult = 1, held = false, last = performance.now(), shown = ''
+  const fmt = m => m < 10 ? '×' + m.toFixed(1).replace(/\.0$/, '') : m < 1e4 ? '×' + Math.round(m) : '×' + m.toExponential(1).replace('e+', 'e')
+  btn.addEventListener('pointerdown', ev => ev.stopPropagation())
+  btn.addEventListener('click', () => { mult *= 1.6; btn.classList.remove('bump'); void btn.offsetWidth; btn.classList.add('bump') })
+  mq.addEventListener('pointerdown', ev => { held = true; mq.classList.add('braking'); mq.setPointerCapture?.(ev.pointerId) })
+  const up = () => { held = false; mq.classList.remove('braking') }
+  mq.addEventListener('pointerup', up); mq.addEventListener('pointercancel', up); mq.addEventListener('lostpointercapture', up)
+  const loop = now => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now
+    if (held) mult *= Math.exp(-2.2 * dt)              // brake: down to a standstill
+    else if (mult < 1) mult += (1 - mult) * (1 - Math.exp(-1.5 * dt))  // released: back to cruising speed
+    const half = track.scrollWidth / 2
+    if (half > 0) {
+      x -= (half / 22) * mult * dt
+      x %= half
+      track.style.transform = `translate3d(${x}px,0,0)`
+    }
+    const t = fmt(Math.max(0, mult)); if (t !== shown) { shown = t; label.textContent = t }
+    requestAnimationFrame(loop)
+  }
+  requestAnimationFrame(loop)
+})()

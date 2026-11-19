@@ -43,7 +43,7 @@ export function initFlow() {
   }
   // photo sampled on a grid of N cells, brightness → alpha
   const photoImg = new Image(); photoImg.src = 'photo.jpg'
-  let gcols = 1, grows = 1, gridN = 0, photoAR = 0, photoLum = new Float32Array(0)
+  let gcols = 1, grows = 1, gridN = 0, photoAR = 0, photoRGB = new Uint8Array(0), tileA = new Float32Array(0)
   function samplePhoto(ar) {
     photoAR = ar; gcols = Math.max(4, Math.round(Math.sqrt(N * ar))); grows = Math.max(4, Math.floor(N / gcols)); gridN = gcols * grows
     const c = document.createElement('canvas'); c.width = gcols; c.height = grows
@@ -51,31 +51,42 @@ export function initFlow() {
     const s2 = Math.max(gcols / iw, grows / ih), dw = iw * s2, dh = ih * s2
     g.drawImage(photoImg, (gcols - dw) / 2, (grows - dh) / 2, dw, dh)
     const d = g.getImageData(0, 0, gcols, grows).data
-    photoLum = new Float32Array(gridN)
-    for (let i = 0; i < gridN; i++) photoLum[i] = (0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2]) / 255
+    photoRGB = new Uint8Array(gridN * 3); tileA = new Float32Array(gridN); fullKey = ''
+    for (let i = 0; i < gridN; i++) for (let ch = 0; ch < 3; ch++) photoRGB[3 * i + ch] = d[4 * i + ch]
   }
   // overlay canvas on the photo, used while it is being generated
   const gen = document.createElement('canvas'); gen.className = 'photo-gen'
   document.querySelector('.about-photo').appendChild(gen)
-  const gctx = gen.getContext('2d'), small = document.createElement('canvas'), sctx = small.getContext('2d')
-  let lastShown = -1
-  function renderPhotoGen(k, pr) {
-    if (Math.abs(k - lastShown) < 0.002 && k !== 0 && k !== 1) return
-    lastShown = k
-    if (k >= 1) { gen.style.opacity = 0; document.querySelector('.about-photo img').style.opacity = 1; return }
-    document.querySelector('.about-photo img').style.opacity = 0
-    if (!photoImg.complete || !photoImg.naturalWidth || k <= 0) { gen.style.opacity = 0; return }
-    const w = Math.round(pr.width), h = Math.round(pr.height)
-    if (gen.width !== w || gen.height !== h) { gen.width = w; gen.height = h }
-    // block size goes from one tile per point down to one pixel
-    const e = k * k * (3 - 2 * k), cell = w / Math.max(1, gcols), bs = Math.max(1, cell * (1 - e) ** 2.2 + 1 - (1 - e))
-    const sw = Math.max(1, Math.round(w / bs)), sh = Math.max(1, Math.round(h / bs))
-    small.width = sw; small.height = sh
-    const iw = photoImg.naturalWidth, ih = photoImg.naturalHeight, sc = Math.max(sw / iw, sh / ih)
-    sctx.drawImage(photoImg, (sw - iw * sc) / 2, (sh - ih * sc) / 2, iw * sc, ih * sc)
-    gctx.imageSmoothingEnabled = bs < 2
-    gctx.clearRect(0, 0, w, h); gctx.drawImage(small, 0, 0, w, h)
-    gen.style.opacity = Math.min(1, k * 4).toFixed(3)
+  const gctx = gen.getContext('2d'), full = document.createElement('canvas'), fctx = full.getContext('2d')
+  let fullKey = '', lastSig = -1
+  // each point that lands on the photo uncovers its own tile of the real colour photo, at full resolution
+  function renderPhotoGen(pr) {
+    const img = document.querySelector('.about-photo img')
+    if (!gridN || !photoImg.complete || !photoImg.naturalWidth) return
+    let sum = 0, done = true
+    for (let i = 0; i < gridN; i++) { sum += tileA[i] * (i + 1); if (tileA[i] < 1) done = false }
+    if (done) { gen.style.opacity = 0; img.style.opacity = 1; lastSig = -1; return }
+    img.style.opacity = 0; gen.style.opacity = 1
+    const dpr = Math.min(2, devicePixelRatio || 1), w = Math.round(pr.width * dpr), h = Math.round(pr.height * dpr)
+    const key = w + 'x' + h + ':' + gcols
+    if (fullKey !== key) {
+      fullKey = key; full.width = w; full.height = h; gen.width = w; gen.height = h
+      const iw = photoImg.naturalWidth, ih = photoImg.naturalHeight, sc = Math.max(w / iw, h / ih)
+      fctx.drawImage(photoImg, (w - iw * sc) / 2, (h - ih * sc) / 2, iw * sc, ih * sc)
+      lastSig = -1
+    }
+    if (Math.abs(sum - lastSig) < 1e-3) return
+    lastSig = sum
+    gctx.clearRect(0, 0, w, h)
+    const cw = w / gcols, ch = h / grows
+    for (let i = 0; i < gridN; i++) {
+      const t = tileA[i]; if (t <= 0) continue
+      const x0 = Math.floor((i % gcols) * cw), y0 = Math.floor(Math.floor(i / gcols) * ch)
+      const x1 = Math.ceil(((i % gcols) + 1) * cw), y1 = Math.ceil((Math.floor(i / gcols) + 1) * ch)
+      gctx.globalAlpha = t
+      gctx.drawImage(full, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0)
+    }
+    gctx.globalAlpha = 1
   }
   size(); addEventListener('resize', size)
 
@@ -168,10 +179,10 @@ export function initFlow() {
     const e = clamp01((H * 0.95 - dr.top) / (H * 0.6))
     const f = clamp01((H - ctr.top) / (H * 0.55))
     const fadeIn = seg(y, heroH * 0.08, heroH * 0.3)
-    // the points build the photo: once they have landed, it develops from a coarse mosaic (one tile per point) to sharp
-    const photoShown = clamp01((a - 0.62) / 0.38)
-    renderPhotoGen(photoShown, pr)
-    if (fadeIn <= 0) return
+    // once built, the photo turns black and white as it scrolls away
+    const g = clamp01((H * 0.35 - pr.top) / (H * 0.45))
+    els.photo.style.filter = g > 0.001 ? `grayscale(${g.toFixed(3)}) contrast(${(1 + 0.1 * g).toFixed(3)})` : ''
+    if (fadeIn <= 0) { tileA.fill(0); renderPhotoGen(pr); return }
 
     for (const p of P) {
       let A, B, k, scatter, stage
@@ -183,10 +194,17 @@ export function initFlow() {
       const ek = easeIO(clamp01(k * 1.12 - p.r * 0.12))
       let x = A[0] + (B[0] - A[0]) * ek + Math.sin(Math.PI * ek) * p.sx * scatter
       let yy = A[1] + (B[1] - A[1]) * ek + Math.sin(Math.PI * ek) * p.sy * scatter * 0.6
-      let alpha = fadeIn * (0.55 + 0.45 * p.r)
-      // on the photo: faint dots, brighter where the photo is bright
+      let alpha = fadeIn * (0.55 + 0.45 * p.r), col = p.acc ? ACC : FG
+      // on the photo: each point takes the colour of its tile and dissolves into it as it lands
       const onPhoto = stage === 1 ? ek : stage === 2 ? 1 - ek : 0
-      if (onPhoto > 0) alpha = alpha * (1 - onPhoto) + onPhoto * fadeIn * (p.i < gridN ? (0.12 + 0.85 * photoLum[p.i] ** 1.3) * (1 - photoShown) ** 1.5 : 0)
+      if (p.i < gridN) tileA[p.i] = stage === 1 ? clamp01((ek - 0.86) / 0.14) : 1
+      if (onPhoto > 0) {
+        if (p.i < gridN) {
+          const o = 3 * p.i, m = Math.min(1, onPhoto * 1.25)
+          col = [col[0] + (photoRGB[o] - col[0]) * m, col[1] + (photoRGB[o + 1] - col[1]) * m, col[2] + (photoRGB[o + 2] - col[2]) * m].map(Math.round)
+          if (stage === 1) alpha = alpha * (1 - onPhoto) + onPhoto * fadeIn * (1 - tileA[p.i])
+        } else alpha *= 1 - onPhoto
+      }
 
       // on the Thales card the targets jump between cycles: glide instead
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {
@@ -209,10 +227,10 @@ export function initFlow() {
           x += (C[0] - x) * ef; yy += (C[1] - yy) * ef
         } else if (lab.phase !== 'idle' && lab.phase !== 'encode') continue
       }
-      const col = p.acc ? ACC : FG
       if (alpha <= 0.01 || yy < -20 || yy > H + 20) continue
       ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`
       ctx.fillRect(x, yy, p.s, p.s)
     }
+    renderPhotoGen(pr)
   })
 }

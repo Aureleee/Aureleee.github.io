@@ -140,7 +140,13 @@ export function initLab() {
 
   /* ---------- phases ---------- */
   const DUR = { encode: 2.6, forward: 1.3, reverse: 3.25, decode: 2.2 }
-  const say = s => { info.textContent = s }
+  let sayT = 0
+  const say = s => {
+    if (info.dataset.msg === s) return
+    info.dataset.msg = s; clearTimeout(sayT)
+    info.classList.add('out')
+    sayT = setTimeout(() => { info.textContent = s; info.classList.remove('out') }, 280)
+  }
   const highlight = () => {}
   const lerp3 = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]
   const fly = (sx, sy, ex, ey, delay, fl, c0, c1, s0, s1) => { const bend = (Math.random() - 0.5) * W * 0.12; return { sx, sy, ex, ey, cx: (sx + ex) / 2 + bend * 0.3, cy: (sy + ey) / 2 + bend, delay, fl, c0, c1, s0, s1 } }
@@ -149,7 +155,7 @@ export function initLab() {
     if (!z0) return
     zt.set(z0); z2.set(z0); stream = []; t = 0; film = []; ripples = []; sparks = []; nextShot = 1.05; scrubbing = false
     phase = 'encode'; pt = 0; highlight(0); runBtn.disabled = true
-    say('Encoding. Every pixel flies into a latent 16× smaller.')
+    say('Encode. The image drops into a latent 16× smaller.')
     const [ix, iy, P] = lay.img, [lx, ly, Pz] = lay.lat
     parts = []; cellArrive = new Float32Array(L * L)
     for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
@@ -162,7 +168,7 @@ export function initLab() {
   }
   function startDecode() {
     phase = 'decode'; pt = 0; highlight(3)
-    say('Decoding. Only now do we leave latent space: the clean z₀ unfolds back into pixels.')
+    say('Decode. Back to pixels.')
     stream = []
     const [lx, ly, Pz] = lay.lat2, [ox, oy, P] = lay.out
     parts = []
@@ -178,11 +184,11 @@ export function initLab() {
     const [lx, ly, Pz] = lay.lat
     if (phase === 'encode' && pt > DUR.encode) {
       phase = 'forward'; pt = 0; highlight(1); parts = []
-      say('Forward process. Noise seeps in, cell by cell, until nothing of the face is left.')
+      say('Forward. Noise until nothing is left.')
     } else if (phase === 'forward') {
       const tau = clamp01(pt / DUR.forward); forwardState(tau)
       if (tau < 0.95) for (let k = 0; k < 1; k++) { const c = Math.floor(Math.random() * L * L); sparks.push({ x: lx + (c % L + 0.5) * Pz / L, y: ly - Pz * 0.35, ty: ly + (Math.floor(c / L) + 0.5) * Pz / L, v: Pz * 1.6 }) }
-      if (pt > DUR.forward) { reverseState(1); z2.set(zt); phase = 'reverse'; pt = 0; highlight(2); say('Reverse process. Start from pure Gaussian noise z_T and denoise, step by step, in latent space.') }
+      if (pt > DUR.forward) { reverseState(1); z2.set(zt); phase = 'reverse'; pt = 0; highlight(2); say('Reverse. Denoise from z_T, one step at a time.') }
     } else if (phase === 'reverse') {
       const k = clamp01(pt / DUR.reverse)
       reverseState(1 - easeIO(k) * 0.35 - k * 0.65)
@@ -201,7 +207,7 @@ export function initLab() {
       if (k >= 1) { reverseState(0); startDecode() }
     } else if (phase === 'decode' && pt > DUR.decode + 0.6) {
       phase = 'done'; highlight(-1); runBtn.disabled = false; runBtn.querySelector('span').textContent = 'Replay'
-      say('Done. Drag along the timeline to scrub t.')
+      say('Drag the timeline to scrub t.')
     }
     stream = stream.filter(p => (p.k += dt / p.fl) < 1)
     sparks = sparks.filter(s => { s.y += s.v * dt; return s.y < s.ty })
