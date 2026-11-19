@@ -7,6 +7,7 @@ import './style.css'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
+import { initWarp } from './warp.js'
 import { initCards } from './cards.js'
 import { initLab } from './lab.js'
 import { initFlow } from './flow.js'
@@ -270,7 +271,7 @@ const hero = (() => {
     tstep.textContent = 'caught'
     gsap.timeline()
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
-      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
+      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 2.2 })
       .add(respawn)
   }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
@@ -357,30 +358,5 @@ const clock = document.getElementById('clock')
 const tick = () => { clock.textContent = 'Paris ' + new Date().toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' }) }
 tick(); setInterval(tick, 10000)
 
-/* ---------- marquee: speed button + hold to brake ---------- */
-;(() => {
-  const mq = document.querySelector('.marquee'), track = mq?.querySelector('.marquee-track'), btn = mq?.querySelector('.mq-speed')
-  if (!mq || !track || !btn) return
-  const label = btn.querySelector('.mq-x')
-  let x = 0, mult = 1, held = false, last = performance.now(), shown = ''
-  const fmt = m => m < 10 ? '×' + m.toFixed(1).replace(/\.0$/, '') : m < 1e4 ? '×' + Math.round(m) : '×' + m.toExponential(1).replace('e+', 'e')
-  btn.addEventListener('pointerdown', ev => ev.stopPropagation())
-  btn.addEventListener('click', () => { mult *= 1.6; btn.classList.remove('bump'); void btn.offsetWidth; btn.classList.add('bump') })
-  mq.addEventListener('pointerdown', ev => { held = true; mq.classList.add('braking'); mq.setPointerCapture?.(ev.pointerId) })
-  const up = () => { held = false; mq.classList.remove('braking') }
-  mq.addEventListener('pointerup', up); mq.addEventListener('pointercancel', up); mq.addEventListener('lostpointercapture', up)
-  const loop = now => {
-    const dt = Math.min(0.05, (now - last) / 1000); last = now
-    if (held) mult *= Math.exp(-2.2 * dt)              // brake: down to a standstill
-    else if (mult < 1) mult += (1 - mult) * (1 - Math.exp(-1.5 * dt))  // released: back to cruising speed
-    const half = track.scrollWidth / 2
-    if (half > 0) {
-      x -= (half / 22) * mult * dt
-      x %= half
-      track.style.transform = `translate3d(${x}px,0,0)`
-    }
-    const t = fmt(Math.max(0, mult)); if (t !== shown) { shown = t; label.textContent = t }
-    requestAnimationFrame(loop)
-  }
-  requestAnimationFrame(loop)
-})()
+/* ---------- marquee: speed sign, hold to brake, and what happens past c ---------- */
+initWarp(lenis)

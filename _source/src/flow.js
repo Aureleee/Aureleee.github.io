@@ -58,8 +58,10 @@ export function initFlow() {
   const gen = document.createElement('canvas'); gen.className = 'photo-gen'
   document.querySelector('.about-photo').appendChild(gen)
   const gctx = gen.getContext('2d'), full = document.createElement('canvas'), fctx = full.getContext('2d')
-  let fullKey = '', lastSig = -1
-  // each point that lands on the photo uncovers its own tile of the real colour photo, at full resolution
+  const mask = document.createElement('canvas'), mctx = mask.getContext('2d')
+  let fullKey = '', lastSig = -1, mw = 0, mh = 0, blkTile = new Int32Array(0), blkThr = new Float32Array(0), mdata = null
+  // each point that lands on the photo paints its own patch of the real colour photo,
+  // grain by grain, with grains the size of the particles, radiating from where it landed
   function renderPhotoGen(pr) {
     const img = document.querySelector('.about-photo img')
     if (!gridN || !photoImg.complete || !photoImg.naturalWidth) return
@@ -73,20 +75,31 @@ export function initFlow() {
       fullKey = key; full.width = w; full.height = h; gen.width = w; gen.height = h
       const iw = photoImg.naturalWidth, ih = photoImg.naturalHeight, sc = Math.max(w / iw, h / ih)
       fctx.drawImage(photoImg, (w - iw * sc) / 2, (h - ih * sc) / 2, iw * sc, ih * sc)
+      const grain = 2.2                                   // CSS px, same as a particle
+      mw = Math.ceil(pr.width / grain); mh = Math.ceil(pr.height / grain)
+      mask.width = mw; mask.height = mh; mdata = mctx.createImageData(mw, mh)
+      blkTile = new Int32Array(mw * mh); blkThr = new Float32Array(mw * mh)
+      for (let j = 0; j < mh; j++) for (let i = 0; i < mw; i++) {
+        const u = (i + 0.5) / mw * gcols, v = (j + 0.5) / mh * grows
+        const ci = Math.min(gcols - 1, Math.floor(u)), cj = Math.min(grows - 1, Math.floor(v))
+        const dist = Math.hypot(u - ci - 0.5, v - cj - 0.5) / 0.75
+        blkTile[j * mw + i] = cj * gcols + ci
+        blkThr[j * mw + i] = 0.02 + 0.55 * dist + 0.4 * Math.random()
+      }
       lastSig = -1
     }
     if (Math.abs(sum - lastSig) < 1e-3) return
     lastSig = sum
+    const md = mdata.data
+    for (let k = 0; k < mw * mh; k++) md[4 * k + 3] = tileA[blkTile[k]] > blkThr[k] ? 255 : 0
+    mctx.putImageData(mdata, 0, 0)
+    gctx.globalCompositeOperation = 'source-over'
     gctx.clearRect(0, 0, w, h)
-    const cw = w / gcols, ch = h / grows
-    for (let i = 0; i < gridN; i++) {
-      const t = tileA[i]; if (t <= 0) continue
-      const x0 = Math.floor((i % gcols) * cw), y0 = Math.floor(Math.floor(i / gcols) * ch)
-      const x1 = Math.ceil(((i % gcols) + 1) * cw), y1 = Math.ceil((Math.floor(i / gcols) + 1) * ch)
-      gctx.globalAlpha = t
-      gctx.drawImage(full, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0)
-    }
-    gctx.globalAlpha = 1
+    gctx.imageSmoothingEnabled = false
+    gctx.drawImage(mask, 0, 0, w, h)
+    gctx.globalCompositeOperation = 'source-in'
+    gctx.drawImage(full, 0, 0)
+    gctx.globalCompositeOperation = 'source-over'
   }
   size(); addEventListener('resize', size)
 
@@ -97,6 +110,8 @@ export function initFlow() {
   }))
 
   const $ = s => document.querySelector(s)
+  // lagged copy of the Thales camera: the cloud follows the camera with some inertia
+  const camL = { x: null, y: 0, z: 1, vx: 0, vy: 0, vz: 0 }
   const els = {
     hero: $('#particles'), photo: $('.about-photo'), photoImg: $('.about-photo img'), hl: [...document.querySelectorAll('.reveal-words .hl')], about: $('.about'), cards: [...document.querySelectorAll('.proj')],
     card1: $('canvas[data-kind=tiles]'), dm: $('#dm'), contact: $('.contact'),
@@ -134,14 +149,25 @@ export function initFlow() {
     // Thales: the points gather around the inpainting mask, then become the generated tank
     const T = window.__thales
     const tr = T ? T.el.getBoundingClientRect() : null
+    if (T) {
+      if (camL.x === null) Object.assign(camL, { x: T.camX, y: T.camY, z: T.z })
+      const K = 16, D = 2 * Math.sqrt(K) * 0.42                     // underdamped: overshoots a little, then settles
+      camL.vx += ((T.camX - camL.x) * K - camL.vx * D) * fdt; camL.x += camL.vx * fdt
+      camL.vy += ((T.camY - camL.y) * K - camL.vy * D) * fdt; camL.y += camL.vy * fdt
+      camL.vz += ((T.z - camL.z) * K - camL.vz * D) * fdt; camL.z += camL.vz * fdt
+    }
     const st3 = p => {
       if (!T) return [cr.left, cr.top]
       const sx = tr.width / T.W, sy = tr.height / T.H
       const map = (x, yy) => [tr.left + (T.W / 2 + (x - T.camX) * T.z) * sx, tr.top + (T.H / 2 + (yy - T.camY) * T.z) * sy]
       const q = T.pts[Math.floor(p.i / N * T.pts.length)] || { x: T.cx, y: T.cy }
       // between two tanks the points drift as a cloud over the whole drone view (screen space, so the zoom never throws them away)
-      const cx0 = tr.left + tr.width * (0.04 + 0.92 * p.u) + Math.sin(time * 0.3 + p.i) * tr.width * 0.02
-      const cy0 = tr.top + tr.height * (0.06 + 0.88 * p.v) + Math.cos(time * 0.27 + p.i * 1.7) * tr.height * 0.02
+      // the cloud lives (partly) in the scene: it pans and zooms with the camera, with momentum
+      const bx = T.W * (0.04 + 0.92 * p.u) + Math.sin(time * 0.3 + p.i) * T.W * 0.02
+      const by = T.H * (0.06 + 0.88 * p.v) + Math.cos(time * 0.27 + p.i * 1.7) * T.H * 0.02
+      const cpl = 0.32, ze = 1 + (camL.z - 1) * cpl * (0.7 + 0.6 * p.r)
+      const cxe = T.W / 2 + (camL.x - T.W / 2) * cpl, cye = T.H / 2 + (camL.y - T.H / 2) * cpl
+      const cx0 = tr.left + (T.W / 2 + (bx - cxe) * ze) * sx, cy0 = tr.top + (T.H / 2 + (by - cye) * ze) * sy
       const lift = ease(clamp01((T.p - 0.78) / 0.14))                   // zoom out: tank → cloud
       const pull = ease(clamp01((T.p - 0.3) / 0.12)) * (1 - lift)       // zoom in: cloud → mask
       const m = ease(clamp01((T.p - 0.42) / 0.22)) * (1 - lift)         // mask → tank shape
@@ -179,9 +205,6 @@ export function initFlow() {
     const e = clamp01((H * 0.95 - dr.top) / (H * 0.6))
     const f = clamp01((H - ctr.top) / (H * 0.55))
     const fadeIn = seg(y, heroH * 0.08, heroH * 0.3)
-    // once built, the photo turns black and white as it scrolls away
-    const g = clamp01((H * 0.35 - pr.top) / (H * 0.45))
-    els.photo.style.filter = g > 0.001 ? `grayscale(${g.toFixed(3)}) contrast(${(1 + 0.1 * g).toFixed(3)})` : ''
     if (fadeIn <= 0) { tileA.fill(0); renderPhotoGen(pr); return }
 
     for (const p of P) {
@@ -197,7 +220,7 @@ export function initFlow() {
       let alpha = fadeIn * (0.55 + 0.45 * p.r), col = p.acc ? ACC : FG
       // on the photo: each point takes the colour of its tile and dissolves into it as it lands
       const onPhoto = stage === 1 ? ek : stage === 2 ? 1 - ek : 0
-      if (p.i < gridN) tileA[p.i] = stage === 1 ? clamp01((ek - 0.86) / 0.14) : 1
+      if (p.i < gridN) tileA[p.i] = stage === 1 ? clamp01((ek - 0.8) / 0.2) : 1
       if (onPhoto > 0) {
         if (p.i < gridN) {
           const o = 3 * p.i, m = Math.min(1, onPhoto * 1.25)
