@@ -190,9 +190,9 @@ export function initFlow() {
     const st5 = p => {
       if (!lab) return [dr.left + dr.width / 2, dr.top]
       const [lx, ly, lp] = lab.lat
-      // a cloud above the latent and the prompt vector, waiting
-      const cv2 = lab.cvec, x1 = lx, x2 = cv2 ? cv2[0] + cv2[2] : lx + lp
-      return [dr.left + x1 + (x2 - x1) * p.u + Math.sin(time * 0.9 + p.i) * 6, dr.top + ly - lp * 0.42 + p.e2 * lp * 0.09 + Math.cos(time * 1.1 + p.i * 1.7) * 4]
+      // a cloud above the two sources (noise on the left, prompt on the right), waiting
+      const x1 = lab.nb[0], x2 = lab.pb[0] + lab.pb[2], top = lab.nb[1]
+      return [dr.left + x1 + (x2 - x1) * p.u + Math.sin(time * 0.9 + p.i) * 6, dr.top + top - lp * 0.12 + p.e2 * lp * 0.06 + Math.cos(time * 1.1 + p.i * 1.7) * 4]
     }
     // half of the cloud diffuses into the latent (the Gaussian noise), the other half encodes the prompt
     const cell = p => {
@@ -250,10 +250,17 @@ export function initFlow() {
       // in the lab: these particles are the noise falling into the latent
       if (stage === 5 && ek >= 1 && lab) {
         if (lab.phase === 'forward') {
-          const fr = clamp01((lab.tau - p.r * 0.75) / 0.25)
+          const fr = clamp01((lab.tau - p.r * 0.55) / 0.45)
           if (fr >= 1) continue
-          const C = cell(p), ef = fr * fr
-          x += (C[0] - x) * ef; yy += (C[1] - yy) * ef
+          // cloud → into its source → down its tunnel → into a cell (latent noise, or the prompt vector)
+          const T = p.i % 2 && lab.cvec ? lab.tp : lab.tn, C = cell(p)
+          const ex = dr.left + T[0], ey = dr.top + T[1], ox = dr.left + T[2], oy = dr.top + T[3]
+          if (fr < 0.35) { const u = (fr / 0.35) ** 1.5; x += (ex - x) * u; yy += (ey - yy) * u }
+          else if (fr < 0.85) {
+            const u = (fr - 0.35) / 0.5, w = 1 - u, ym = (ey + oy) / 2, j = Math.sin(p.i * 7.1) * 6
+            x = w * w * w * ex + 3 * w * w * u * ex + 3 * w * u * u * ox + u * u * u * ox + j
+            yy = w * w * w * ey + 3 * w * w * u * ym + 3 * w * u * u * ym + u * u * u * oy
+          } else { const u = (fr - 0.85) / 0.15; x = ox + (C[0] - ox) * u; yy = oy + (C[1] - oy) * u }
         } else if (lab.phase !== 'idle' && lab.phase !== 'encode') continue
       }
       if (alpha <= 0.01 || yy < -20 || yy > H + 20) continue

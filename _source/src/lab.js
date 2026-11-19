@@ -149,20 +149,24 @@ export function initLab() {
     W = Math.round(cw * dpr); H = Math.round(W * (mob ? 1.95 : 0.47))
     cv.width = W; cv.height = H; cv.style.height = H / dpr + 'px'
     if (!mob) {
-      H = Math.round(W * 0.46); cv.height = H; cv.style.height = H / dpr + 'px'
-      const P = W * 0.17, Pz = W * 0.12, top = H * 0.11, cy = top + P / 2
+      H = Math.round(W * 0.54); cv.height = H; cv.style.height = H / dpr + 'px'
+      const P = W * 0.17, Pz = W * 0.12, top = H * 0.36, cy = top + P / 2
       lay = { img: [W * 0.1 - P / 2, top, P], lat: [W * 0.37 - Pz / 2, cy - Pz / 2, Pz], lat2: [W * 0.63 - Pz / 2, cy - Pz / 2, Pz], out: [W * 0.9 - P / 2, top, P],
-        tl: [W * 0.07, top + P + H * 0.17, W * 0.86], film: [0, top + P + H * 0.25, 0, W * 0.86 / 21 * 0.9], fs: W / 100 }
+        tl: [W * 0.07, top + P + H * 0.14, W * 0.86], film: [0, top + P + H * 0.21, 0, W * 0.86 / 21 * 0.9], fs: W / 100 }
+      lay.nb = [W * 0.37 - W * 0.07, H * 0.05, W * 0.14, H * 0.1]
+      lay.pb = [W * 0.555 - W * 0.11, H * 0.05, W * 0.22, H * 0.1]
     } else {
-      H = Math.round(W * 1.85); cv.height = H; cv.style.height = H / dpr + 'px'
-      const P = W * 0.56, Pz = W * 0.36, y1 = H * 0.04, y2 = y1 + P + H * 0.07, y3 = y2 + Pz + H * 0.13
+      H = Math.round(W * 2.25); cv.height = H; cv.style.height = H / dpr + 'px'
+      const P = W * 0.56, Pz = W * 0.36, y1 = H * 0.03, y2 = y1 + P + H * 0.17, y3 = y2 + Pz + H * 0.11
       lay = { img: [W / 2 - P / 2, y1, P], lat: [W * 0.27 - Pz / 2, y2, Pz], lat2: [W * 0.73 - Pz / 2, y2, Pz], out: [W / 2 - P / 2, y3, P],
-        tl: [W * 0.07, y3 + P + H * 0.06, W * 0.86], film: [0, y3 + P + H * 0.095, 0, W * 0.86 / 21 * 0.9], fs: W / 32 }
+        tl: [W * 0.07, y3 + P + H * 0.05, W * 0.86], film: [0, y3 + P + H * 0.08, 0, W * 0.86 / 21 * 0.9], fs: W / 32 }
+      lay.nb = [W * 0.27 - W * 0.16, y1 + P + H * 0.035, W * 0.32, H * 0.05]
+      lay.pb = [W * 0.73 - W * 0.2, y1 + P + H * 0.035, W * 0.4, H * 0.05]
     }
   }
 
   /* ---------- phases ---------- */
-  const DUR = { encode: 2.6, forward: 1.3, reverse: 3.25, decode: 2.2 }
+  const DUR = { encode: 2.6, forward: 2.6, reverse: 3.25, decode: 2.2 }
   let sayT = 0
   const say = () => { void sayT }
   const highlight = () => {}
@@ -309,12 +313,45 @@ export function initLab() {
 
   // the prompt, embedded: a toy text encoder (a hash of each word) gives a 24-d context vector c
   function embed() {
-    const words = (promptEl?.value || '').toLowerCase().split(/\s+/).filter(Boolean)
+    const words = (promptEl?.textContent || '').toLowerCase().split(/\s+/).filter(Boolean)
     ctxVec = Array.from({ length: 24 }, (_, i) => {
       let v = 0
       words.forEach((w, j) => { let h = 2166136261 ^ i; for (const ch of w) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); v += ((h >>> 0) % 1000) / 500 - 1 + 0.15 * Math.sin(j + i) })
       return Math.tanh(v / Math.max(1, Math.sqrt(words.length)) * 1.6)
     })
+  }
+  // the two sources above: ε ~ N(0, I) on the left feeds z_T, the prompt on the right feeds c = E(prompt)
+  const tunnelPts = () => {
+    const { nb, pb, lat } = lay, cb = cvecBox || [lat[0] + lat[2], lat[1], lat[2], 10]
+    return {
+      n: [nb[0] + nb[2] / 2, nb[1] + nb[3], lat[0] + lat[2] / 2, lat[1] - lay.fs * 2],
+      p: [pb[0] + pb[2] / 2, pb[1] + pb[3], cb[0] + cb[2] / 2, cb[1] - lay.fs * 2],
+    }
+  }
+  function sources() {
+    const { nb, pb } = lay, fs = lay.fs, T = tunnelPts(), on = phase === 'forward'
+    const tube = ([x0, y0, x1, y1], hot) => {
+      const ym = (y0 + y1) / 2, w = fs * 0.9
+      for (const o of [-w, w]) { ctx.strokeStyle = hot ? 'rgba(200,255,0,.35)' : '#242423'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 + o, y0); ctx.bezierCurveTo(x0 + o, ym, x1 + o, ym, x1 + o, y1); ctx.stroke() }
+      ctx.setLineDash([3, 7]); ctx.lineDashOffset = -performance.now() / 25; ctx.strokeStyle = hot ? ACC : '#2e2e2c'
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(x0, ym, x1, ym, x1, y1); ctx.stroke(); ctx.setLineDash([])
+    }
+    tube(T.n, on); tube(T.p, on)
+    const box = ([x, y, w, h]) => { ctx.strokeStyle = on ? '#4a4a46' : '#2e2e2c'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h) }
+    box(nb); box(pb)
+    // noise source: a bell curve and its name
+    ctx.font = `${fs * 0.95}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = on ? ACC : '#8b8b84'
+    ctx.fillText('ε ∼ 𝒩(0, I)', nb[0] + nb[2] / 2, nb[1] + nb[3] * 0.82)
+    ctx.strokeStyle = on ? ACC : '#5a5a55'; ctx.lineWidth = 1.2; ctx.beginPath()
+    for (let i = 0; i <= 40; i++) { const u = i / 40, xx = nb[0] + nb[2] * (0.2 + 0.6 * u), z = (u - 0.5) * 6, yy = nb[1] + nb[3] * 0.55 - Math.exp(-z * z / 2) * nb[3] * 0.38; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy) }
+    ctx.stroke()
+    // prompt source: the text, on two lines
+    ctx.fillStyle = '#6a6a64'; ctx.font = `${fs * 0.75}px JetBrains Mono`; ctx.fillText('prompt', pb[0] + pb[2] / 2, pb[1] + fs * 1.2)
+    const words = (promptEl?.textContent || '').split(' '), mid = Math.ceil(words.length / 2)
+    ctx.fillStyle = on ? '#f1efe9' : '#8b8b84'; ctx.font = `${fs * 0.85}px Inter, sans-serif`
+    ctx.fillText(words.slice(0, mid).join(' '), pb[0] + pb[2] / 2, pb[1] + pb[3] * 0.58)
+    ctx.fillText(words.slice(mid).join(' '), pb[0] + pb[2] / 2, pb[1] + pb[3] * 0.85)
+    ctx.textAlign = 'left'
   }
   function context() {
     if (!ctxVec.length) embed()
@@ -380,7 +417,7 @@ export function initLab() {
     for (const r of ripples) { ctx.strokeStyle = `rgba(200,255,0,${r.a})`; ctx.lineWidth = 1.2; ctx.strokeRect(r.x - r.r, r.y - r.r, 2 * r.r, 2 * r.r) }
     if (rev) drawStream()
     if (phase === 'encode' || phase === 'decode') drawParticles(pt)
-    context(); timeline(); filmstrip()
+    sources(); context(); timeline(); filmstrip()
     if (phase === 'idle') { ctx.font = `${lay.fs}px JetBrains Mono`; ctx.fillStyle = '#6a6a64'; ctx.textAlign = 'center'; ctx.fillText('press run', lat[0] + lat[2] / 2, lat[1] + lat[2] / 2); ctx.textAlign = 'left' }
   }
 
@@ -390,8 +427,7 @@ export function initLab() {
   addEventListener('resize', () => { if (cv.clientWidth === lastW) return; lastW = cv.clientWidth; layout(); if (phase === 'encode') start(); else if (phase === 'decode') startDecode() })
   for (const im of [photo, srcImg, maskImg]) im.addEventListener('load', () => { loadImage(); if (ready()) { draw(); if (visible && !autoplayed && z0) { autoplayed = true; setTimeout(start, 400) } } })
   loadImage()
-  promptEl?.addEventListener('keydown', e => { if (e.key === 'Enter' && !runBtn.disabled) { e.preventDefault(); start() } })
-  promptEl?.addEventListener('input', () => embed())
+
   runBtn.onclick = start
   new IntersectionObserver(es => es.forEach(e => {
     visible = e.isIntersecting
@@ -400,5 +436,5 @@ export function initLab() {
   gsap.ticker.add((_, dt) => { if (!visible || !lay) return; if (z0 && phase !== 'idle' && phase !== 'done') update(Math.min(dt, 50) / 1000); draw() })
 
   window.__dm = () => ({ phase, pt, t })
-  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), cvec: cvecBox && cvecBox.map(v => v / k) } }
+  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; const T = tunnelPts(); return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), cvec: cvecBox && cvecBox.map(v => v / k), tn: T.n.map(v => v / k), tp: T.p.map(v => v / k), nb: lay.nb.map(v => v / k), pb: lay.pb.map(v => v / k) } }
 }
