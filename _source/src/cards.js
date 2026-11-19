@@ -51,25 +51,35 @@ function thales(cv) {
   // projection: ground plane, camera pitched down, Y up
   const proj = (X, Y, Z) => [W / 2 + X * f / Z, yh + (C - Y * f * 0.85) / Z]
 
+  let trees = [], patch = null
   function build() {
     hN = makeNoise(7); fN = makeNoise(31)
     yh = H * 0.16; C = H - yh; f = W * 0.5
-    bg = document.createElement('canvas'); bg.width = Math.round(W * K); bg.height = Math.round(H * K)
-    const b = bg.getContext('2d'), BW = bg.width, BH = bg.height
-    // sky + haze
-    const sky = b.createLinearGradient(0, 0, 0, yh * K); sky.addColorStop(0, '#070707'); sky.addColorStop(1, '#141413')
-    b.fillStyle = sky; b.fillRect(0, 0, BW, yh * K + 2)
-    b.fillStyle = '#090909'; b.fillRect(0, yh * K, BW, BH)
+    trees = []
+    for (let Z = 1.05; Z < 12; Z += 0.07 * Math.max(1, Z * 0.4)) for (let X = -Z * 1.1; X < Z * 1.1; X += 0.07 * Math.max(1, Z * 0.4)) {
+      const x = X + (Math.random() - 0.5) * 0.06, z = Z + (Math.random() - 0.5) * 0.06
+      if (forest(x, z) > 0.53 && Math.abs(x - riverX(z)) > 0.25 && Math.abs(x - trackX(z)) > 0.1 && Math.random() < 0.8) trees.push([x, z, 0.8 + Math.random() * 0.4])
+    }
+    trees.sort((p, q) => q[1] - p[1])
+    bg = renderScene(0, 0, W, H, K)
+    patch = null; placed = []; spawn()
+  }
+
+  // renders the region [rx, ry, rw, rh] of the scene (base screen units) at scale K2
+  function renderScene(rx, ry, rw, rh, K2) {
+    const cnv = document.createElement('canvas'); cnv.width = Math.round(rw * K2); cnv.height = Math.round(rh * K2)
+    const b = cnv.getContext('2d'), BW = cnv.width, BH = cnv.height
+    b.fillStyle = '#090909'; b.fillRect(0, 0, BW, BH)
     // contour lines, computed per pixel through the inverse projection
     const img = b.getImageData(0, 0, BW, BH), D = img.data, st = 2
     const gw = Math.ceil(BW / st), gh = Math.ceil(BH / st), lev = new Int16Array(gw * gh).fill(-999), fog = new Float32Array(gw * gh)
     for (let j = 0; j < gh; j++) {
-      const sy = j * st / K
+      const sy = ry + j * st / K2
       if (sy < yh + 3) continue
       const Z = C / (sy - yh)
       if (Z > 14) continue
       for (let i = 0; i < gw; i++) {
-        const X = (i * st / K - W / 2) * Z / f
+        const X = (rx + i * st / K2 - W / 2) * Z / f
         lev[j * gw + i] = Math.floor(height(X, Z) * 26); fog[j * gw + i] = Math.max(0, 1 - (Z - 1) / 11)
       }
     }
@@ -82,44 +92,41 @@ function thales(cv) {
       }
     }
     b.putImageData(img, 0, 0)
-    b.scale(K, K)
-    // far ridges above the horizon
-    for (let k = 0; k < 3; k++) {
-      b.strokeStyle = ['#2a2a28', '#333331', '#3d3d3a'][k]; b.lineWidth = 1.2; b.beginPath()
-      for (let x = 0; x <= W; x += 4) {
-        const y = yh - 2 - (hN(x / W * (4 + k * 3) + k * 9, k * 3.3, 3) - 0.3) * H * (0.11 - k * 0.025)
-        x ? b.lineTo(x, y) : b.moveTo(x, y)
+    b.scale(K2, K2); b.translate(-rx, -ry)
+    // sky
+    if (ry < yh + 2) {
+      const sky = b.createLinearGradient(0, 0, 0, yh); sky.addColorStop(0, '#070707'); sky.addColorStop(1, '#141413')
+      b.fillStyle = sky; b.fillRect(rx, ry, rw, yh + 2 - ry)
+      for (let k = 0; k < 3; k++) {
+        b.strokeStyle = ['#2a2a28', '#333331', '#3d3d3a'][k]; b.lineWidth = 1.2; b.beginPath()
+        for (let x = 0; x <= W; x += 4) {
+          const y = yh - 2 - (hN(x / W * (4 + k * 3) + k * 9, k * 3.3, 3) - 0.3) * H * (0.11 - k * 0.025)
+          x ? b.lineTo(x, y) : b.moveTo(x, y)
+        }
+        b.stroke()
       }
-      b.stroke()
     }
-    // river: band whose projected width shrinks with depth
     const ribbon = (fx, wd, fill, line, dash) => {
       const L = [], R = []
-      for (let Z = 1.0; Z < 14; Z *= 1.025) { L.push(proj(fx(Z) - wd, 0, Z)); R.push(proj(fx(Z) + wd, 0, Z)) }
-      if (fill) { b.beginPath(); L.forEach((p, i) => i ? b.lineTo(...p) : b.moveTo(...p)); R.reverse().forEach(p => b.lineTo(...p)); b.closePath(); b.fillStyle = fill; b.fill(); R.reverse() }
+      for (let Z = 1.0; Z < 14; Z *= 1.01) { L.push(proj(fx(Z) - wd, 0, Z)); R.push(proj(fx(Z) + wd, 0, Z)) }
+      if (fill) { b.beginPath(); L.forEach((p, i) => i ? b.lineTo(...p) : b.moveTo(...p)); [...R].reverse().forEach(p => b.lineTo(...p)); b.closePath(); b.fillStyle = fill; b.fill() }
       b.strokeStyle = line; b.lineWidth = 1.1; b.setLineDash(dash || [])
       for (const S of [L, R]) { b.beginPath(); S.forEach((p, i) => i ? b.lineTo(...p) : b.moveTo(...p)); b.stroke() }
       b.setLineDash([])
     }
     ribbon(riverX, 0.16, '#121a1e', '#2f4048')
     ribbon(trackX, 0.05, null, '#4a4a45', [5, 4])
-    // trees, back to front
-    const trees = []
-    for (let Z = 1.05; Z < 12; Z += 0.07 * Math.max(1, Z * 0.4)) for (let X = -Z * 1.1; X < Z * 1.1; X += 0.07 * Math.max(1, Z * 0.4)) {
-      const x = X + (Math.random() - 0.5) * 0.06, z = Z + (Math.random() - 0.5) * 0.06
-      if (forest(x, z) > 0.53 && Math.abs(x - riverX(z)) > 0.25 && Math.abs(x - trackX(z)) > 0.1 && Math.random() < 0.8) trees.push([x, z])
-    }
-    trees.sort((p, q) => q[1] - p[1])
-    for (const [x, z] of trees) {
-      const [px, py] = proj(x, 0, z), s = 0.11 * f / z * (0.8 + Math.random() * 0.4), fogA = Math.max(0.15, 1 - (z - 1) / 11)
-      b.fillStyle = '#0a0a0a'; b.strokeStyle = `rgba(150,150,140,${0.55 * fogA})`; b.lineWidth = Math.max(0.6, s * 0.05)
+    for (const [x, z, sz] of trees) {
+      const [px, py] = proj(x, 0, z), s = 0.11 * f / z * sz
+      if (px < rx - s || px > rx + rw + s || py < ry - s || py > ry + rh + s) continue
+      const fogA = Math.max(0.15, 1 - (z - 1) / 11)
+      b.fillStyle = '#0a0a0a'; b.strokeStyle = `rgba(150,150,140,${0.55 * fogA})`; b.lineWidth = Math.max(0.6 / K2 * 1.6, s * 0.05)
       b.beginPath(); b.moveTo(px, py - s); b.lineTo(px - s * 0.32, py - s * 0.08); b.lineTo(px + s * 0.32, py - s * 0.08); b.closePath(); b.fill(); b.stroke()
       b.beginPath(); b.moveTo(px, py - s * 0.08); b.lineTo(px, py); b.stroke()
     }
-    // haze near the horizon
     const hz = b.createLinearGradient(0, yh - 10, 0, yh + H * 0.12); hz.addColorStop(0, 'rgba(18,18,17,0)'); hz.addColorStop(0.3, 'rgba(18,18,17,.75)'); hz.addColorStop(1, 'rgba(18,18,17,0)')
-    b.fillStyle = hz; b.fillRect(0, yh - 10, W, H * 0.13)
-    placed = []; spawn()
+    b.fillStyle = hz; b.fillRect(rx, yh - 10, rw, H * 0.13)
+    return cnv
   }
 
   /* tank as projected 3D boxes */
@@ -176,6 +183,8 @@ function thales(cv) {
     const [x0, y0, x1, y1] = bboxOf(boxes), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
     cur = { ...best, th, boxes, cx, cy, bb: [x0, y0, x1, y1], pts: tankPts(boxes, 0.35).map(([x, y]) => ({ x, y, ex: randn(), ey: randn() })) }
     clock = 0
+    patch = null
+    setTimeout(() => { const rw = W / 3.6 * 1.25, rh = H / 3.6 * 1.25, r = [cx - rw / 2, cy - rh / 2, rw, rh]; patch = { r, c: renderScene(...r, 3.6) } }, 30)
   }
 
   const st = sized(cv, ({ w, h }) => { W = w; H = h; build() })
@@ -190,6 +199,7 @@ function thales(cv) {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-camX, -camY)
     ctx.drawImage(bg, 0, 0, W, H)
+    if (patch && z > 1.2) { ctx.globalAlpha = Math.min(1, (z - 1.2) / 0.8); ctx.drawImage(patch.c, ...patch.r); ctx.globalAlpha = 1 }
     for (const t of placed) {
       drawTank(t.boxes, 'rgba(241,239,233,.9)', 1.3 / z)
       const [x0, y0, x1, y1] = t.bb; ctx.strokeStyle = ACC; ctx.lineWidth = 1.3 / z; ctx.strokeRect(x0 - 3, y0 - 3, x1 - x0 + 6, y1 - y0 + 6)
