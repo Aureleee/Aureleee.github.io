@@ -22,7 +22,7 @@ const TYPES = {
 // bigger targets, a bit tougher (the cannon fires on its own)
 for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= T.boss ? 1 : 0.9; T.coin = Math.ceil(T.coin * 1.1) }
 // each level: +45% health, +8% speed, +20% damage (like Brotato's per-wave scaling)
-const HPL = l => 1 + 0.75 * (l - 1) + 0.18 * (l - 1) ** 2, SPL = l => 1 + 0.08 * (l - 1), DML = l => 1 + 0.3 * (l - 1)
+const HPL = l => 1 + 0.7 * (l - 1) + 0.1 * (l - 1) ** 2, SPL = l => 1 + 0.08 * (l - 1), DML = l => 1 + 0.3 * (l - 1)
 // [time (s), type, count, extra hp, gap between units]
 const LEVELS = [
   { name: 'warm-up', waves: [[0.5, 'drift', 4], [3, 'drone', 1], [5, 'swarm', 6, 0, 0.25], [8, 'drift', 5], [11, 'zig', 3], [13, 'drone', 1], [15, 'swarm', 8, 0, 0.2]] },
@@ -132,12 +132,12 @@ export function initGame({ lenis }) {
   function startLevel(n) {
     S.level = n; S.phase = 'play'; S.lt = 0
     // from level 3 on, the waves get much bigger: by then the cannon is strong, the noise has to be a flood
-    const flood = n >= 2 ? 2.2 + 1.1 * (n - 2) : 1             // ×2.2, ×3.3, ×4.4, ×5.5
+    const flood = n >= 2 ? 1.4 + 0.8 * (n - 2) : 1             // ×1.4, ×2.2, ×3, ×3.8
     S.spawnQ = LEVELS[n - 1].waves.flatMap(([t, type, count, extra = 0, gap]) => {
       const big = TYPES[type].boss, c = big ? count : Math.round(count * flood), gp = (gap ?? (big ? 0 : 0.5)) / (big ? 1 : Math.sqrt(flood))
       return Array.from({ length: c }, (_, k) => ({ t: t + k * gp, type, extra }))
     }).sort((a, b) => a.t - b.t)
-    S.trickle = n >= 2 ? 0.7 / (1 + 0.6 * (n - 2)) : 0; S.trickT = 0
+    S.trickle = n >= 2 ? 0.9 / (1 + 0.45 * (n - 2)) : 0; S.trickT = 0
     panel.classList.remove('on')
     say(`LEVEL ${n}`, LEVELS[n - 1].name)
     updHud()
@@ -257,11 +257,11 @@ export function initGame({ lenis }) {
     for (let k = 0; k < n; k++) {
       const a = base + (n > 1 ? -spread / 2 + spread * k / (n - 1) : 0)
       const v = SPEED[S.stats.vl]
-      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.7 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.78 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     if (S.perks.has('twin')) {
       const a = base + Math.PI, v = SPEED[S.stats.vl]
-      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.7 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.78 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     S.recoil = 1
     S.reload = RATE[S.stats.rl] / (S.perks.has('overclock') ? 1.3 : 1)

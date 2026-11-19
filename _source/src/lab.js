@@ -31,7 +31,8 @@ const cmapRGB = v => { const i = cmapIdx(v); return [LUT[i] / 255, LUT[i + 1] / 
 
 export function initLab() {
   const cv = document.getElementById('dm'), ctx = cv.getContext('2d')
-  const runBtn = document.getElementById('dm-run'), promptEl = document.getElementById('dm-prompt')
+  const runBtn = document.getElementById('dm-run')
+  const PROMPT = 'add a motivated, friendly engineer who loves diffusion and flow matching'
 
   let W = 0, H = 0, lay = null
   let hiRes = null, pyr = [], noiseTex = null, x = null, z0 = null, eps = null, blurs = [], cellR = null
@@ -145,16 +146,17 @@ export function initLab() {
 
   /* ---------- layout ---------- */
   function layout() {
+    srcPts = null
     const cw = cv.clientWidth, dpr = Math.min(2, devicePixelRatio || 1), mob = cw < 700
     W = Math.round(cw * dpr); H = Math.round(W * (mob ? 1.95 : 0.47))
     cv.width = W; cv.height = H; cv.style.height = H / dpr + 'px'
     if (!mob) {
-      H = Math.round(W * 0.54); cv.height = H; cv.style.height = H / dpr + 'px'
-      const P = W * 0.17, Pz = W * 0.12, top = H * 0.36, cy = top + P / 2
+      H = Math.round(W * 0.5); cv.height = H; cv.style.height = H / dpr + 'px'
+      const P = W * 0.17, Pz = W * 0.12, top = H * 0.3, cy = top + P / 2
       lay = { img: [W * 0.1 - P / 2, top, P], lat: [W * 0.37 - Pz / 2, cy - Pz / 2, Pz], lat2: [W * 0.63 - Pz / 2, cy - Pz / 2, Pz], out: [W * 0.9 - P / 2, top, P],
-        tl: [W * 0.07, top + P + H * 0.14, W * 0.86], film: [0, top + P + H * 0.21, 0, W * 0.86 / 21 * 0.9], fs: W / 100 }
-      lay.nb = [W * 0.37 - W * 0.07, H * 0.05, W * 0.14, H * 0.1]
-      lay.pb = [W * 0.555 - W * 0.11, H * 0.05, W * 0.22, H * 0.1]
+        tl: [W * 0.07, top + P + H * 0.15, W * 0.86], film: [0, top + P + H * 0.23, 0, W * 0.86 / 21 * 0.9], fs: W / 100 }
+      lay.nb = [W * 0.37 - W * 0.075, H * 0.03, W * 0.15, H * 0.13]
+      lay.pb = [W * 0.6 - W * 0.13, H * 0.03, W * 0.26, H * 0.13]
     } else {
       H = Math.round(W * 2.25); cv.height = H; cv.style.height = H / dpr + 'px'
       const P = W * 0.56, Pz = W * 0.36, y1 = H * 0.03, y2 = y1 + P + H * 0.17, y3 = y2 + Pz + H * 0.11
@@ -313,7 +315,7 @@ export function initLab() {
 
   // the prompt, embedded: a toy text encoder (a hash of each word) gives a 24-d context vector c
   function embed() {
-    const words = (promptEl?.textContent || '').toLowerCase().split(/\s+/).filter(Boolean)
+    const words = PROMPT.toLowerCase().split(/\s+/).filter(Boolean)
     ctxVec = Array.from({ length: 24 }, (_, i) => {
       let v = 0
       words.forEach((w, j) => { let h = 2166136261 ^ i; for (const ch of w) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); v += ((h >>> 0) % 1000) / 500 - 1 + 0.15 * Math.sin(j + i) })
@@ -322,10 +324,10 @@ export function initLab() {
   }
   // the two sources above: ε ~ N(0, I) on the left feeds z_T, the prompt on the right feeds c = E(prompt)
   const tunnelPts = () => {
-    const { nb, pb, lat } = lay, cb = cvecBox || [lat[0] + lat[2], lat[1], lat[2], 10]
+    const { nb, pb, lat, lat2 } = lay
     return {
-      n: [nb[0] + nb[2] / 2, nb[1] + nb[3], lat[0] + lat[2] / 2, lat[1] - lay.fs * 2],
-      p: [pb[0] + pb[2] / 2, pb[1] + pb[3], cb[0] + cb[2] / 2, cb[1] - lay.fs * 2],
+      n: [nb[0] + nb[2] / 2, nb[1] + nb[3], lat[0] + lat[2] / 2, lat[1] - lay.fs * 1.8],
+      p: [pb[0] + pb[2] / 2, pb[1] + pb[3], lat2[0] + lat2[2] / 2, lat2[1] - lay.fs * 1.8],
     }
   }
   function sources() {
@@ -337,52 +339,51 @@ export function initLab() {
       ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(x0, ym, x1, ym, x1, y1); ctx.stroke(); ctx.setLineDash([])
     }
     tube(T.n, on); tube(T.p, on)
-    const box = ([x, y, w, h]) => { ctx.strokeStyle = on ? '#4a4a46' : '#2e2e2c'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h) }
+    const box = ([x, y, w, h]) => { ctx.strokeStyle = on ? '#4a4a46' : '#242423'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h) }
     box(nb); box(pb)
-    // noise source: a bell curve and its name
-    ctx.font = `${fs * 0.95}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = on ? ACC : '#8b8b84'
-    ctx.fillText('ε ∼ 𝒩(0, I)', nb[0] + nb[2] / 2, nb[1] + nb[3] * 0.82)
-    ctx.strokeStyle = on ? ACC : '#5a5a55'; ctx.lineWidth = 1.2; ctx.beginPath()
-    for (let i = 0; i <= 40; i++) { const u = i / 40, xx = nb[0] + nb[2] * (0.2 + 0.6 * u), z = (u - 0.5) * 6, yy = nb[1] + nb[3] * 0.55 - Math.exp(-z * z / 2) * nb[3] * 0.38; i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy) }
+    ctx.font = `${fs * 0.8}px JetBrains Mono`; ctx.textAlign = 'left'; ctx.fillStyle = '#5a5a55'
+    ctx.fillText('ε ∼ 𝒩(0, I)', nb[0] + fs * 0.6, nb[1] + fs * 1.3); ctx.fillText('prompt', pb[0] + fs * 0.6, pb[1] + fs * 1.3)
+    // faint guides under the points
+    ctx.globalAlpha = 0.18; ctx.strokeStyle = '#8b8b84'; ctx.lineWidth = 1; ctx.beginPath()
+    for (let i = 0; i <= 40; i++) { const [xx, yy] = bell(i / 40); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy) }
     ctx.stroke()
-    // prompt source: the text, on two lines
-    ctx.fillStyle = '#6a6a64'; ctx.font = `${fs * 0.75}px JetBrains Mono`; ctx.fillText('prompt', pb[0] + pb[2] / 2, pb[1] + fs * 1.2)
-    const words = (promptEl?.textContent || '').split(' '), mid = Math.ceil(words.length / 2)
-    ctx.fillStyle = on ? '#f1efe9' : '#8b8b84'; ctx.font = `${fs * 0.85}px Inter, sans-serif`
-    ctx.fillText(words.slice(0, mid).join(' '), pb[0] + pb[2] / 2, pb[1] + pb[3] * 0.58)
-    ctx.fillText(words.slice(mid).join(' '), pb[0] + pb[2] / 2, pb[1] + pb[3] * 0.85)
-    ctx.textAlign = 'left'
+    const words = PROMPT.split(' '), lines = [words.slice(0, 4).join(' '), words.slice(4, 8).join(' '), words.slice(8).join(' ')]
+    const size = Math.min(pb[3] * 0.2, pb[2] / 15)
+    ctx.globalAlpha = phase === 'idle' || phase === 'encode' ? 0.14 : 0.3; ctx.fillStyle = '#f1efe9'; ctx.font = `600 ${size}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    lines.forEach((l, i) => ctx.fillText(l, pb[0] + pb[2] / 2, pb[1] + pb[3] * (0.42 + i * 0.22)))
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.globalAlpha = 1
+  }
+  // the bell curve inside the noise box (u in 0..1 along x), and the prompt laid out in the prompt box
+  const bell = u => { const { nb } = lay, z = (u - 0.5) * 6; return [nb[0] + nb[2] * (0.1 + 0.8 * u), nb[1] + nb[3] * 0.9 - Math.exp(-z * z / 2) * nb[3] * 0.62] }
+  let srcPts = null
+  function sampleSources() {
+    const { nb, pb } = lay, fs = lay.fs
+    // noise: points on the curve and under it
+    const n = []
+    for (let k = 0; k < 400; k++) {
+      const u = Math.random(), [x, y] = bell(u), base = nb[1] + nb[3] * 0.9
+      n.push(Math.random() < 0.55 ? [x, y] : [x, y + (base - y) * Math.random()])
+    }
+    // prompt: the pixels of the text
+    const o = document.createElement('canvas'); o.width = Math.ceil(pb[2]); o.height = Math.ceil(pb[3])
+    const g = o.getContext('2d'), words = PROMPT.split(' '), lines = [words.slice(0, 4).join(' '), words.slice(4, 8).join(' '), words.slice(8).join(' ')]
+    const size = Math.min(pb[3] * 0.2, pb[2] / 15)
+    g.font = `600 ${size}px Inter, sans-serif`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
+    lines.forEach((l, i) => g.fillText(l, o.width / 2, o.height * (0.42 + i * 0.22)))
+    const d = g.getImageData(0, 0, o.width, o.height).data, pts = [], st = Math.max(1, Math.round(size / 9))
+    for (let y = 0; y < o.height; y += st) for (let x = 0; x < o.width; x += st) if (d[4 * (y * o.width + x) + 3] > 120) pts.push([pb[0] + x, pb[1] + y])
+    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[pts[i], pts[j]] = [pts[j], pts[i]] }
+    srcPts = { n, p: pts }
+    void fs
   }
   function context() {
-    if (!ctxVec.length) embed()
-    const { lat, lat2 } = lay, fs = lay.fs, rev = phase === 'reverse'
-    const gx0 = lat[0] + lat[2], gx1 = lat2[0], cw = Math.min((gx1 - gx0) * 0.62, lat[2] * 0.95), cx = (gx0 + gx1) / 2
-    const cell = cw / 12, y0 = lat[1] - cell * 0.6, x0 = cx - cw / 2
-    cvecBox = [x0, y0, cw, cell * 2]
-    ctx.font = `${fs * 0.85}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = rev ? ACC : '#6a6a64'
-    ctx.fillText(phase === 'forward' ? 'encoding the prompt…' : 'c = E(prompt)', cx, y0 - fs * 0.7)
-    const enc = phase === 'forward' ? clamp01((pt / DUR.forward - 0.2) / 0.8) : phase === 'idle' || phase === 'encode' ? 0 : 1
-    for (let i = 0; i < 24; i++) {
-      const v = ctxVec[i], k = cmapIdx(v * 1.1)
-      ctx.strokeStyle = '#2e2e2c'; ctx.lineWidth = 1; ctx.strokeRect(x0 + (i % 12) * cell + 1.5, y0 + Math.floor(i / 12) * cell + 1.5, cell - 3, cell - 3)
-      ctx.globalAlpha = clamp01(enc * 1.3 - (i / 24) * 0.3) * (rev ? 0.95 : 0.75)
-      ctx.fillStyle = `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`
-      ctx.fillRect(x0 + (i % 12) * cell + 1, y0 + Math.floor(i / 12) * cell + 1, cell - 2, cell - 2)
-    }
-    ctx.globalAlpha = 1
-    // it conditions every step: a line into the loop, and a pulse per step
-    const sx = cx, sy = y0 + cell * 2 + 4, ex = lat2[0] + lat2[2] * 0.5, ey = lat2[1] + lat2[2] + fs * 2.2
-    ctx.strokeStyle = rev ? 'rgba(200,255,0,.55)' : '#2e2e2c'; ctx.lineWidth = 1; ctx.setLineDash([2, 5])
-    const c1x = sx, c1y = ey + fs * 1.2, c2x = ex - lat2[2] * 0.4, c2y = ey + fs * 1.5
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex - lat2[2] * 0.2, ey); ctx.stroke(); ctx.setLineDash([])
+    const T = tunnelPts().p, [x0, y0, x1, y1] = T, ym = (y0 + y1) / 2
     for (const q of pulses) {
       const u = easeIO(q.k), w = 1 - u
-      const px = w * w * w * sx + 3 * w * w * u * c1x + 3 * w * u * u * c2x + u * u * u * (ex - lat2[2] * 0.2)
-      const py = w * w * w * sy + 3 * w * w * u * c1y + 3 * w * u * u * c2y + u * u * u * ey
+      const px = w * w * w * x0 + 3 * w * w * u * x0 + 3 * w * u * u * x1 + u * u * u * x1, py = w * w * w * y0 + 3 * w * w * u * ym + 3 * w * u * u * ym + u * u * u * y1
       ctx.fillStyle = ACC; ctx.globalAlpha = Math.sin(q.k * Math.PI); ctx.fillRect(px - 2, py - 2, 4, 4); ctx.globalAlpha = 1
     }
-    if (rev) { ctx.fillStyle = '#6a6a64'; ctx.fillText('cross-attention', (sx + ex) / 2, ey + fs * 2.4) }
-    ctx.textAlign = 'left'
+    if (phase === 'reverse') { ctx.font = `${lay.fs * 0.8}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = '#6a6a64'; ctx.fillText('conditioning', x1, y1 + lay.fs * 1.1 - lay.fs * 3.2); ctx.textAlign = 'left' }
   }
 
   function draw() {
@@ -436,5 +437,5 @@ export function initLab() {
   gsap.ticker.add((_, dt) => { if (!visible || !lay) return; if (z0 && phase !== 'idle' && phase !== 'done') update(Math.min(dt, 50) / 1000); draw() })
 
   window.__dm = () => ({ phase, pt, t })
-  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; const T = tunnelPts(); return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), cvec: cvecBox && cvecBox.map(v => v / k), tn: T.n.map(v => v / k), tp: T.p.map(v => v / k), nb: lay.nb.map(v => v / k), pb: lay.pb.map(v => v / k) } }
+  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; if (!srcPts) sampleSources(); const T = tunnelPts(); return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), lat2: lay.lat2.map(v => v / k), tn: T.n.map(v => v / k), tp: T.p.map(v => v / k), srcN: srcPts.n, srcP: srcPts.p, k } }
 }

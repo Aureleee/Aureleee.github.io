@@ -190,13 +190,13 @@ export function initFlow() {
     const st5 = p => {
       if (!lab) return [dr.left + dr.width / 2, dr.top]
       const [lx, ly, lp] = lab.lat
-      // a cloud above the two sources (noise on the left, prompt on the right), waiting
-      const x1 = lab.nb[0], x2 = lab.pb[0] + lab.pb[2], top = lab.nb[1]
-      return [dr.left + x1 + (x2 - x1) * p.u + Math.sin(time * 0.9 + p.i) * 6, dr.top + top - lp * 0.12 + p.e2 * lp * 0.06 + Math.cos(time * 1.1 + p.i * 1.7) * 4]
+      // the points draw the two sources: half of them the bell curve of ε ~ N(0, I), half the prompt; a slight fluid drift
+      const src = p.i % 2 ? lab.srcP : lab.srcN, q = src[(p.i >> 1) % src.length], k = lab.k
+      return [dr.left + q[0] / k + Math.sin(time * 1.1 + p.i * 0.7) * 1.2, dr.top + q[1] / k + Math.cos(time * 0.9 + p.i * 1.3) * 1.2]
     }
     // half of the cloud diffuses into the latent (the Gaussian noise), the other half encodes the prompt
     const cell = p => {
-      if (p.i % 2 && lab.cvec) { const [cx, cy, cw, ch] = lab.cvec, k = p.hk % 24; return [dr.left + cx + ((k % 12) + 0.5) * cw / 12, dr.top + cy + (Math.floor(k / 12) + 0.5) * ch / 2] }
+      if (p.i % 2) { const [cx, cy, cp] = lab.lat2, c = p.hk % (32 * 32); return [dr.left + cx + ((c % 32) + 0.5) * cp / 32, dr.top + cy + (Math.floor(c / 32) + 0.5) * cp / 32] }
       const [lx, ly, lp] = lab.lat, c = p.hk % (32 * 32); return [dr.left + lx + ((c % 32) + 0.5) * lp / 32, dr.top + ly + (Math.floor(c / 32) + 0.5) * lp / 32]
     }
 
@@ -253,7 +253,7 @@ export function initFlow() {
           const fr = clamp01((lab.tau - p.r * 0.55) / 0.45)
           if (fr >= 1) continue
           // cloud → into its source → down its tunnel → into a cell (latent noise, or the prompt vector)
-          const T = p.i % 2 && lab.cvec ? lab.tp : lab.tn, C = cell(p)
+          const T = p.i % 2 ? lab.tp : lab.tn, C = cell(p)
           const ex = dr.left + T[0], ey = dr.top + T[1], ox = dr.left + T[2], oy = dr.top + T[3]
           if (fr < 0.35) { const u = (fr / 0.35) ** 1.5; x += (ex - x) * u; yy += (ey - yy) * u }
           else if (fr < 0.85) {
