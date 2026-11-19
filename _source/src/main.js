@@ -124,23 +124,13 @@ const hero = (() => {
   // the hidden game: the name dissolves into the arena (a border of flowing dots) and the score
   const GMt = { v: 0 }
   let scoreStr = '', scoreBox = { y: 0, h: 1, w: 1 }
-  function computeScore(str) {
-    scoreStr = str
-    const o = document.createElement('canvas'); o.width = W; o.height = H
-    const g = o.getContext('2d'), fs = Math.min(H * 0.3, W * 0.22)
-    g.font = `800 ${fs}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(str, W / 2, H * 0.47)
-    scoreBox = { y: H * 0.47, h: fs * 0.8, w: Math.max(fs * 0.7, g.measureText(str).width) }
-    const d = g.getImageData(0, 0, W, H).data, pts = []
-    for (let y = 0; y < H; y += 3) for (let x = 0; x < W; x += 3) if (d[4 * (y * W + x) + 3] > 128) pts.push([x, y])
-    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[pts[i], pts[j]] = [pts[j], pts[i]] }
-    let k = 0
-    for (const p of P) {
-      if (p.gk === undefined) { const r = Math.random(); p.gk = r < 0.55 ? 0 : r < 0.85 ? 1 : 2; p.bs = Math.random(); p.d = p.d ?? Math.random() }
-      if (p.gk === 0) { const q = pts[k++ % Math.max(1, pts.length)] || [W / 2, H / 2]; p.sx = q[0]; p.sy = q[1] }
-    }
+  function computeScore() {
+    // a few dots make a shield ring around the core, most of them draw the arena walls, a handful drift
+    for (const p of P) { const r = Math.random(); p.gk = r < 0.22 ? 0 : r < 0.9 ? 1 : 2; p.bs = Math.random(); p.d = p.d ?? Math.random() }
+    scoreBox = { y: (86 + H - 56) / 2, h: 60, w: 60 }
   }
-  window.__gameArena = { setScore: v => { const s2 = String(v); if (s2 !== scoreStr) computeScore(s2) }, box: () => scoreBox,
-    on: () => { computeScore('0'); gsap.to(GMt, { v: 1, duration: 1.4, ease: 'power2.inOut' }) } }
+  window.__gameArena = { setScore: () => {}, box: () => scoreBox,
+    on: () => { computeScore(); gsap.to(GMt, { v: 1, duration: 1.4, ease: 'power2.inOut' }) } }
   window.__heroHurt = k => { for (const p of P) if (p.gk === 0 && Math.random() < 0.5) { p.vx += (Math.random() - 0.5) * 30 * k; p.vy += (Math.random() - 0.5) * 30 * k } }
   const arenaAt = (u, inset) => {
     const x0 = W * 0.04 + inset, y0 = 86 + inset, x1 = W * 0.96 - inset, y1 = H - 56 - inset, w = x1 - x0, h = y1 - y0, L = 2 * (w + h)
@@ -164,7 +154,7 @@ const hero = (() => {
       q.x += (26 * Math.sin(q.y * 0.012 + time * 0.45 + q.ph) + 12 * Math.cos(time * 0.3 + q.ph)) * dt
       q.y = q.ay + 14 * Math.sin(q.x * 0.006 + time * 0.5 + q.ph) + 6 * Math.sin(time * 0.9 + q.ph * 3)
       if (q.x < -10) q.x = W + 10; if (q.x > W + 10) q.x = -10
-      ctx.fillStyle = q.acc ? `rgba(200,255,0,${q.a})` : `rgba(241,239,233,${q.a})`
+      ctx.fillStyle = q.acc ? `rgba(200,255,0,${q.a * (1 - 0.85 * GMt.v)})` : `rgba(241,239,233,${q.a * (1 - 0.85 * GMt.v)})`
       ctx.fillRect(q.x, q.y, q.s, q.s)
     }
     for (const p of P) {
@@ -179,9 +169,9 @@ const hero = (() => {
       if (GMt.v > 0 && p.gk !== undefined) {
         const gm = easeIO(Math.max(0, Math.min(1, GMt.v * 1.5 - p.d * 0.5)))
         let gx, gy
-        if (p.gk === 0) { gx = p.sx; gy = p.sy }
+        if (p.gk === 0) { const a = p.bs * 6.283 + time * 0.4, rr = 34 + p.ph * 14; gx = W / 2 + Math.cos(a) * rr; gy = (86 + H - 56) / 2 + Math.sin(a) * rr }
         else if (p.gk === 1) { [gx, gy] = arenaAt(p.bs + time * 0.012, (p.ph - 0.4) * 6) }
-        else { gx = W * (0.08 + 0.84 * ((p.bs + time * 0.01 * (p.ph + 0.3)) % 1)); gy = H * (0.15 + 0.7 * (0.5 + 0.5 * Math.sin(time * 0.2 + p.bs * 40))) }
+        else { gx = W * (0.06 + 0.88 * ((p.bs + time * 0.01 * (p.ph + 0.3)) % 1)); gy = H * (0.12 + 0.76 * (0.5 + 0.5 * Math.sin(time * 0.2 + p.bs * 40))) }
         const sw = Math.sin(Math.PI * gm) * (p.cr || 80) * 0.6
         bx += (gx - bx) * gm + Math.cos(p.ca + time) * sw; by += (gy - by) * gm + Math.sin(p.ca + time) * sw * 0.6
       }
@@ -190,7 +180,7 @@ const hero = (() => {
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
       p.vx += -p.ox * 0.06; p.vy += -p.oy * 0.06; p.vx *= 0.82; p.vy *= 0.82
       p.ox += p.vx; p.oy += p.vy
-      ctx.fillStyle = p.acc ? ACC : `rgba(241,239,233,${(0.5 + 0.5 * ab) * (1 - 0.45 * GMt.v)})`
+      ctx.fillStyle = p.acc ? (GMt.v > 0 ? `rgba(200,255,0,${1 - 0.85 * GMt.v})` : ACC) : `rgba(241,239,233,${(0.5 + 0.5 * ab) * (1 - GMt.v * (p.gk === 2 ? 0.85 : p.gk === 1 ? 0.5 : 0.35))})`
       ctx.fillRect(x0 + p.ox, y0 + p.oy, r, r)
     }
     // ---- the chase lives on its own fixed layer, in viewport coordinates, so it follows the visitor down the page
@@ -288,7 +278,7 @@ const hero = (() => {
   cv.addEventListener('mousemove', e => { const rc = cv.getBoundingClientRect(); mouse.x = e.clientX - rc.left; mouse.y = e.clientY - rc.top })
   cv.addEventListener('mouseleave', () => { mouse.x = mouse.y = -1e4 })
   addEventListener('pointerdown', e => {
-    if (gaming) return startBow(e)
+    if (gaming) return                                   // the game handles its own controls
     if (!rogue || caught) return
     if (Math.hypot(e.clientX - rogue.x, e.clientY - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return startBow(e)
     catchIt()
@@ -296,7 +286,7 @@ const hero = (() => {
 
   /* ---------- on the hero: click, drag back like a bow, release → a shot the other way ---------- */
   // the gun starts as a weak pistol; the hidden game upgrades it (range, rebounds, pierce, multishot, power)
-  const BASE = { range: 1, bounce: 0, multi: 1, pierce: 0, dmg: 1 }
+  const BASE = { range: 5, bounce: 0, multi: 1, pierce: 0, dmg: 1 }
   const RANGES = [0, 380, 620, 900, 1400, 2400], KEEP = [0, 0.5, 0.7, 0.85]
   let bow = null, lasers = [], gaming = false
   window.__rogue = () => rogue && !caught && !gaming ? [rogue.x, rogue.y] : null
@@ -337,7 +327,7 @@ const hero = (() => {
     const b = bow; endAim()
     const dx = b.x0 - b.x, dy = b.y0 - b.y, len = Math.hypot(dx, dy)
     if (len < 14) return
-    const G = window.__game, S = G?.active ? G.stats : BASE
+    const G = window.__game, S = BASE
     const pw = Math.min(1, len / 170), full = pw > 0.92
     const range = RANGES[Math.min(5, S.range)] * (0.45 + 0.55 * pw)
     const base = Math.atan2(dy, dx), n = S.multi, spread = n > 1 ? Math.min(0.5, 0.11 * (n - 1)) : 0
@@ -360,7 +350,7 @@ const hero = (() => {
     if (bow) {
       const dx = bow.x0 - bow.x, dy = bow.y0 - bow.y, len = Math.hypot(dx, dy), pw = Math.min(1, len / 170)
       const ux = len ? dx / len : 0, uy = len ? dy / len : 0, held = (performance.now() - bow.t0) / 1000
-      const S = window.__game?.active ? window.__game.stats : BASE
+      const S = BASE
       if (Math.random() < 0.3 + pw) { const a = Math.random() * 7, r = 26 + Math.random() * 30; bow.sparks.push({ x: bow.x0 + Math.cos(a) * r, y: bow.y0 + Math.sin(a) * r, life: 1 }) }
       bow.sparks = bow.sparks.filter(s => { s.x += (bow.x0 - s.x) * 6 * dt; s.y += (bow.y0 - s.y) * 6 * dt; s.life -= dt * 2.2; gctx.fillStyle = `rgba(200,255,0,${s.life * 0.8})`; gctx.fillRect(s.x - 1, s.y - 1, 2, 2); return s.life > 0 })
       gctx.strokeStyle = 'rgba(241,239,233,.25)'; gctx.lineWidth = 1; gctx.setLineDash([2, 4])
@@ -382,11 +372,7 @@ const hero = (() => {
       // damage along the piece of beam travelled this frame
       if (L.head > prev && !L.done) {
         const [x1, y1] = at(L, prev), [x2, y2] = at(L, L.head)
-        const G = window.__game
-        if (G?.playing) {
-          const cut = G.hitBeam(x1, y1, x2, y2, 2 + 3 * L.pw, L)
-          if (cut !== null) { L.stop = prev + (L.head - prev) * cut; L.head = L.stop; L.done = true }
-        }
+        void x1; void y1; void x2; void y2
       }
       if (prev < L.stop && L.head >= L.stop) { L.done = true; const [ex, ey] = at(L, L.stop); for (let k = 0; k < 8; k++) { const a = Math.random() * 7, v = 60 + Math.random() * 160; bursts.push({ x: ex, y: ey, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.35 }) } }
       const fade = Math.max(0, 1 - L.age / 0.6), tail = Math.max(0, L.head - (70 + 700 * L.age))
