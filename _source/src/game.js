@@ -20,27 +20,39 @@ const TYPES = {
   boss:     { hp: 90,  r: 15, sp: 10, coin: 110, dmg: 60, gun: 1.2, boss: true, spawn: 2.2, keep: 300 },
 }
 // bigger targets, a bit tougher (the cannon fires on its own)
-for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= T.boss ? 0.65 : 0.7; T.coin = Math.ceil(T.coin * 2.5) }
+for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= T.boss ? 1 : 0.9; T.coin = Math.ceil(T.coin * 1.1) }
+// each level: +45% health, +8% speed, +20% damage (like Brotato's per-wave scaling)
+const HPL = l => 1 + 0.75 * (l - 1), SPL = l => 1 + 0.08 * (l - 1), DML = l => 1 + 0.3 * (l - 1)
 // [time (s), type, count, extra hp, gap between units]
 const LEVELS = [
   { name: 'warm-up', waves: [[0.5, 'drift', 4], [3, 'drone', 1], [5, 'swarm', 6, 0, 0.25], [8, 'drift', 5], [11, 'zig', 3], [13, 'drone', 1], [15, 'swarm', 8, 0, 0.2]] },
   { name: 'first boss', waves: [[0.5, 'zig', 4], [2, 'drone', 2], [4, 'swarm', 14, 0, 0.1], [7, 'splitter', 3], [10, 'drift', 6], [12, 'mini', 1], [15, 'swarm', 16, 0, 0.1]] },
-  { name: 'they shoot back', waves: [[0.5, 'shooter', 2], [1.5, 'drone', 3], [3, 'swarm', 18, 0, 0.08], [6, 'tank', 2], [9, 'splitter', 4], [11, 'mini', 1], [11.5, 'mini', 1], [15, 'zig', 8]] },
-  { name: 'heavy noise', waves: [[0.5, 'tank', 3], [2, 'swarm', 24, 0, 0.07], [4, 'drone', 4], [6, 'shooter', 3], [8, 'boss', 1], [11, 'splitter', 5], [14, 'swarm', 24, 0, 0.07]] },
-  { name: 'the big one', waves: [[0.5, 'boss', 1], [3, 'swarm', 30, 0, 0.06], [5, 'drone', 4], [8, 'mini', 2], [11, 'shooter', 4], [14, 'boss', 1], [16, 'splitter', 6], [19, 'swarm', 30, 0, 0.06]] },
+  { name: 'they shoot back', waves: [[0.5, 'shooter', 2], [1.5, 'drone', 3], [3, 'swarm', 22, 0, 0.07], [6, 'tank', 2], [9, 'splitter', 4], [11, 'mini', 1], [11.5, 'mini', 1], [15, 'zig', 8]] },
+  { name: 'heavy noise', waves: [[0.5, 'tank', 3], [2, 'swarm', 30, 0, 0.06], [4, 'drone', 5], [6, 'shooter', 3], [8, 'boss', 1], [11, 'splitter', 5], [14, 'swarm', 24, 0, 0.07]] },
+  { name: 'the big one', waves: [[0.5, 'boss', 1], [3, 'swarm', 36, 0, 0.05], [5, 'drone', 6], [8, 'mini', 2], [11, 'shooter', 4], [14, 'boss', 1], [16, 'splitter', 6], [19, 'swarm', 30, 0, 0.06]] },
 ]
-const DMG = [0, 1.2, 2.2, 3.4, 5], RATE = [0, 0.3, 0.21, 0.15, 0.1], SPEED = [0, 950, 1150, 1380, 1650], KEEP = [0, 0.55, 0.72, 0.86], LDMG = [0, 4, 7, 11]
+const DMG = [0, 1, 1.6, 2.4, 3.4], RATE = [0, 0.36, 0.27, 0.2, 0.14], SPEED = [0, 900, 1080, 1280, 1500], KEEP = [0, 0.55, 0.72, 0.86], LDMG = [0, 4, 7, 11]
 const SHOP = [
-  { id: 'dmg',    name: 'Power',     desc: 'cannon damage', lvl: s => s.dl, max: 4, cost: l => [25, 60, 120][l - 1] },
-  { id: 'rate',   name: 'Fire rate', desc: 'pof pof pof, faster', lvl: s => s.rl, max: 4, cost: l => [25, 60, 120][l - 1] },
-  { id: 'speed',  name: 'Velocity',  desc: 'faster shells', lvl: s => s.vl, max: 4, cost: l => [20, 50, 100][l - 1] },
-  { id: 'multi',  name: 'Multishot', desc: '+2 shells in a fan', lvl: s => s.multi, max: 5, cost: l => [40, 90, 160, 250][l - 1] },
-  { id: 'bounce', name: 'Rebound',   desc: 'shots bounce off the walls', lvl: s => s.bounce, max: 3, cost: l => [35, 80, 150][l] },
-  { id: 'pierce', name: 'Pierce',    desc: 'goes through, weaker each hit', lvl: s => s.pierce, max: 3, cost: l => [35, 80, 150][l] },
-  { id: 'laser',  name: 'Laser',     desc: 'right click: hold, release', lvl: s => s.laser, max: 3, cost: l => [80, 120, 200][l] },
-  { id: 'turret', name: 'Turret',    desc: '+1 turret around the core', lvl: s => s.turrets, max: 6, cost: l => [35, 60, 100, 150, 210, 280][l] },
-  { id: 'focus',  name: 'Focus',     desc: '+1 s of slow motion', lvl: s => s.focusMax, max: 5, cost: l => [35, 70, 120, 180][l - 1] },
+  { id: 'dmg',    name: 'Power',     desc: 'cannon damage', lvl: s => s.dl, max: 4, cost: l => [40, 95, 190][l - 1] },
+  { id: 'rate',   name: 'Fire rate', desc: 'pof pof pof, faster', lvl: s => s.rl, max: 4, cost: l => [40, 95, 190][l - 1] },
+  { id: 'speed',  name: 'Velocity',  desc: 'faster shells', lvl: s => s.vl, max: 4, cost: l => [30, 80, 160][l - 1] },
+  { id: 'multi',  name: 'Multishot', desc: '+2 shells in a fan', lvl: s => s.multi, max: 5, cost: l => [65, 145, 255, 400][l - 1] },
+  { id: 'bounce', name: 'Rebound',   desc: 'shots bounce off the walls', lvl: s => s.bounce, max: 3, cost: l => [55, 130, 240][l] },
+  { id: 'pierce', name: 'Pierce',    desc: 'goes through, weaker each hit', lvl: s => s.pierce, max: 3, cost: l => [55, 130, 240][l] },
+  { id: 'laser',  name: 'Laser',     desc: 'right click: hold, release', lvl: s => s.laser, max: 3, cost: l => [130, 190, 320][l] },
+  { id: 'turret', name: 'Turret',    desc: '+1 turret around the core', lvl: s => s.turrets, max: 6, cost: l => [55, 95, 160, 240, 335, 450][l] },
+  { id: 'focus',  name: 'Focus',     desc: '+1 s of slow motion', lvl: s => s.focusMax, max: 5, cost: l => [55, 110, 190, 290][l - 1] },
   { id: 'repair', name: 'Repair',    desc: 'turrets + 35 signal', lvl: () => 0, max: 99, cost: () => 25 },
+]
+
+const PERKS = [
+  { id: 'homing',  name: 'Homing',     desc: 'shells curve gently toward the closest noise' },
+  { id: 'blast',   name: 'Blast',      desc: 'kills explode and hurt what is around' },
+  { id: 'chain',   name: 'Chain',      desc: 'hits arc to a second enemy' },
+  { id: 'crit',    name: 'Crit',       desc: '20% chance of triple damage' },
+  { id: 'frost',   name: 'Frost',      desc: 'noise near the core is slowed' },
+  { id: 'regen',   name: 'Regen',      desc: 'the signal slowly comes back' },
+  { id: 'overclock', name: 'Overclock', desc: '+30% fire rate' },
 ]
 
 export function initGame({ lenis }) {
@@ -75,7 +87,7 @@ export function initGame({ lenis }) {
   const S = {
     active: false, phase: 'off', level: 0, coins: 0, signal: 100, score: 0, combo: 0, comboT: 0,
     stats: null, focus: 2, ts: 1, reload: 0,
-    enemies: [], pend: [], drones: [], bolts: [], foes: [], fx: [], texts: [], spawnQ: [], lt: 0, shake: 0,
+    enemies: [], pend: [], drones: [], bolts: [], foes: [], fx: [], texts: [], spawnQ: [], lt: 0, shake: 0, perks: new Set(), arcs: [], rings: [],
   }
 
   const say = (big, small = '', dur = 1.8) => {
@@ -111,8 +123,8 @@ export function initGame({ lenis }) {
     S.pend.push({ type, extra, x, y, t: big ? 1.1 : 0.55, T: big ? 1.1 : 0.55, dots: Array.from({ length: big ? 40 : 10 }, () => ({ a: Math.random() * 7, r: rnd(25, big ? 140 : 60) })) })
   }
   function materialise(type, extra, x, y) {
-    const T = TYPES[type], hp = T.hp + extra
-    S.enemies.push({ type, T, x, y, hp, max: hp, ph: rnd(0, 10), flash: 0, gun: T.gun ? rnd(2, 2 + T.gun) : 0, spawnT: T.spawn || 0, trail: [], ox: rnd(-22, 22), oy: rnd(-18, 18) })
+    const T = TYPES[type], hp = (T.hp + extra) * HPL(S.level)
+    S.enemies.push({ type, T, x, y, hp, max: hp, sp: T.sp * SPL(S.level), dmg: T.dmg * DML(S.level), ph: rnd(0, 10), flash: 0, gun: T.gun ? rnd(2, 2 + T.gun) : 0, spawnT: T.spawn || 0, trail: [], ox: rnd(-22, 22), oy: rnd(-18, 18) })
   }
 
   function startLevel(n) {
@@ -125,7 +137,7 @@ export function initGame({ lenis }) {
 
   function start(x, y, hpLeft = 3) {
     if (S.active) return
-    Object.assign(S, { active: true, coins: 40, signal: 100, score: 0, combo: 0, enemies: [], pend: [], bolts: [], foes: [], fx: [], texts: [], focus: 2, reload: 0 })
+    Object.assign(S, { active: true, coins: 0, perks: new Set(), signal: 100, score: 0, combo: 0, enemies: [], pend: [], bolts: [], foes: [], fx: [], texts: [], focus: 2, reload: 0 })
     S.stats = { dl: 1, dmg: 1, rl: 1, vl: 1, multi: 1, bounce: 0, pierce: 0, laser: 0, turrets: 1, focusMax: 2 }
     lenis?.scrollTo(0, { duration: 0.8 }); setTimeout(() => lenis?.stop(), 820)
     document.documentElement.classList.add('gaming')
@@ -182,8 +194,14 @@ export function initGame({ lenis }) {
   }
   function levelCleared() {
     S.phase = 'shop'
-    const bonus = 60 * S.level; S.coins += bonus
-    updHud(); renderShop(true, bonus)
+    const bonus = 15 * S.level; S.coins += bonus
+    updHud()
+    const pool = PERKS.filter(p => !S.perks.has(p.id)).sort(() => Math.random() - 0.5).slice(0, 3)
+    if (!pool.length || S.level >= 5) return renderShop(true, bonus)
+    panel.innerHTML = `<p class="gm-t">level ${S.level} cleared <span>pick a special upgrade</span></p><div class="gm-grid gm-perks">` +
+      pool.map(p => `<button class="gm-item gm-perk" data-id="${p.id}"><b>${p.name}</b><span>${p.desc}</span><i>free</i></button>`).join('') + '</div>'
+    panel.querySelectorAll('.gm-perk').forEach(b => b.addEventListener('click', () => { S.perks.add(b.dataset.id); renderShop(true, bonus) }))
+    panel.classList.add('on')
   }
   function win() {
     panel.classList.remove('on')
@@ -226,7 +244,7 @@ export function initGame({ lenis }) {
       S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     S.recoil = 1
-    S.reload = RATE[S.stats.rl]
+    S.reload = RATE[S.stats.rl] / (S.perks.has('overclock') ? 1.3 : 1)
   }
   // the laser: a straight beam to the wall, rebounding inside the arena
   function trace(x, y, ux, uy, bounces) {
@@ -263,7 +281,13 @@ export function initGame({ lenis }) {
     }
     return null
   }
-  function damage(e, d) {
+  function damage(e, d, arc = true) {
+    if (S.perks.has('crit') && Math.random() < 0.2) { d *= 3; S.texts.push({ x: e.x, y: e.y - 14, s: 'crit', life: 0.5 }) }
+    if (arc && S.perks.has('chain')) {
+      let best = null, bd = 150
+      for (const o of S.enemies) if (o !== e) { const dd = Math.hypot(o.x - e.x, o.y - e.y); if (dd < bd) { bd = dd; best = o } }
+      if (best) { S.arcs.push({ x1: e.x, y1: e.y, x2: best.x, y2: best.y, life: 0.15 }); damage(best, d * 0.5, false) }
+    }
     e.hp -= d; e.flash = 0.12
     burst(e.x, e.y, LIME, 4, 110)
     if (e.hp <= 0.01) kill(e)
@@ -277,6 +301,10 @@ export function initGame({ lenis }) {
     S.texts.push({ x: e.x, y: e.y - 10, s: `+${coin} ◆${S.combo > 1 ? ` ×${S.combo}` : ''}`, life: 0.9 })
     burst(e.x, e.y, LIME, e.T.boss ? 90 : 16, e.T.boss ? 440 : 220)
     if (e.T.boss) S.shake = 12
+    if (S.perks.has('blast')) {
+      S.rings.push({ x: e.x, y: e.y, r: 0, life: 0.3 })
+      for (const o of [...S.enemies]) if (Math.hypot(o.x - e.x, o.y - e.y) < 70) damage(o, 1, false)
+    }
     if (e.T.split) for (let k = 0; k < e.T.split; k++) materialise('swarm', 0, e.x + rnd(-8, 8), e.y + rnd(-8, 8))
     updHud()
   }
@@ -298,6 +326,7 @@ export function initGame({ lenis }) {
       const dt = rdt * S.ts, t = now / 1000, C = core()
       S.reload = Math.max(0, S.reload - dt); S.recoil = Math.max(0, (S.recoil || 0) - rdt * 8)
       if (playing && S.reload <= 0 && M.x > -1e3) fireCannon()          // auto-fire toward the mouse
+      if (S.perks.has('regen') && playing) { S.signal = Math.min(100, S.signal + 0.8 * dt); $('.gm-sig i').style.width = S.signal + '%' }
       S.comboT -= dt; if (S.comboT <= 0 && S.combo) { S.combo = 0; updHud() }
       if (S.ts < 0.9 && playing) {
         const k = (1 - S.ts) * 0.6, gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75)
@@ -323,12 +352,13 @@ export function initGame({ lenis }) {
         const e = S.enemies[k], T = e.T
         if (playing) {
           const tx = C.x + e.ox, ty = C.y + e.oy, dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy) + 1e-3
-          let sp = T.sp
+          let sp = e.sp
           if (T.keep && d < T.keep) sp *= -0.4                   // gunners keep their distance and circle
           let vx = dx / d * sp, vy = dy / d * sp
           if (T.keep) { vx += -dy / d * 30; vy += dx / d * 30 }
           if (e.type === 'zig' || e.type === 'swarm') { const w = e.type === 'zig' ? 70 : 40; vx += -dy / d * Math.sin(t * 4 + e.ph) * w; vy += dx / d * Math.sin(t * 4 + e.ph) * w }
           if (e.type === 'drift') { vx += Math.sin(t * 1.3 + e.ph) * 14; vy += Math.cos(t * 1.1 + e.ph) * 14 }
+          if (S.perks.has('frost') && d < 200) { vx *= 0.55; vy *= 0.55 }
           e.x += vx * dt; e.y += vy * dt
           if (T.gun) {
             e.gun -= dt
@@ -344,7 +374,7 @@ export function initGame({ lenis }) {
           }
           if (T.spawn) { e.spawnT -= dt; if (e.spawnT <= 0) { e.spawnT = T.spawn; for (let j = 0; j < 3; j++) materialise('swarm', 0, e.x + rnd(-20, 20), e.y + rnd(-20, 20)) } }
           if (d < 14 + T.r && !T.keep) {                         // reached the core
-            S.enemies.splice(k, 1); S.signal -= T.dmg; S.shake = Math.max(S.shake, T.boss ? 14 : 5); S.combo = 0
+            S.enemies.splice(k, 1); S.signal -= e.dmg; S.shake = Math.max(S.shake, T.boss ? 14 : 5); S.combo = 0
             burst(e.x, e.y, RED, 22, 240); window.__heroHurt?.(T.boss ? 1 : 0.3); updHud()
             if (S.signal <= 0) lose()
             continue
@@ -385,6 +415,15 @@ export function initGame({ lenis }) {
         g.fillStyle = `rgb(${ORANGE})`; g.fillRect(d.x - 8, d.y + 9, 16 * d.hp / d.max, 2)
       }
       S.bolts = S.bolts.filter(b => {
+        if (S.perks.has('homing')) {                       // a gentle pull toward the closest enemy ahead
+          let best = null, bd = 260
+          for (const e of S.enemies) { const dd = Math.hypot(e.x - b.x, e.y - b.y); if (dd < bd && (e.x - b.x) * b.vx + (e.y - b.y) * b.vy > 0) { bd = dd; best = e } }
+          if (best) {
+            const sp = Math.hypot(b.vx, b.vy), a = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x)
+            let da = want - a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI
+            const na = a + Math.max(-3.2 * dt, Math.min(3.2 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
+          }
+        }
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt
         for (const e of S.enemies) if (Math.hypot(e.x - b.x, e.y - b.y) < e.T.r + 3) { damage(e, 0.5); return false }
         const n = Math.hypot(b.vx, b.vy)
@@ -405,6 +444,15 @@ export function initGame({ lenis }) {
       // cannon shells: bounce off the arena walls if upgraded, pierce if upgraded
       const A = arena()
       S.shells = S.shells.filter(b => {
+        if (S.perks.has('homing')) {                       // a gentle pull toward the closest enemy ahead
+          let best = null, bd = 260
+          for (const e of S.enemies) { const dd = Math.hypot(e.x - b.x, e.y - b.y); if (dd < bd && (e.x - b.x) * b.vx + (e.y - b.y) * b.vy > 0) { bd = dd; best = e } }
+          if (best) {
+            const sp = Math.hypot(b.vx, b.vy), a = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x)
+            let da = want - a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI
+            const na = a + Math.max(-3.2 * dt, Math.min(3.2 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
+          }
+        }
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt
         if (b.x < A.x0 || b.x > A.x1) { if (b.bounces-- > 0) { b.vx = -b.vx; b.x = b.x < A.x0 ? 2 * A.x0 - b.x : 2 * A.x1 - b.x; b.hits.clear(); burst(b.x, b.y, FG, 6, 110) } else { burst(b.x, b.y, FG, 5, 90); return false } }
         if (b.y < A.y0 || b.y > A.y1) { if (b.bounces-- > 0) { b.vy = -b.vy; b.y = b.y < A.y0 ? 2 * A.y0 - b.y : 2 * A.y1 - b.y; b.hits.clear(); burst(b.x, b.y, FG, 6, 110) } else { burst(b.x, b.y, FG, 5, 90); return false } }
@@ -440,6 +488,8 @@ export function initGame({ lenis }) {
         g.strokeStyle = `rgba(${LIME},${0.2 + 0.3 * ch})`; g.setLineDash([5, 7]); g.lineDashOffset = -t * 50; g.lineWidth = 1
         g.beginPath(); P.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); g.setLineDash([])
       }
+      S.arcs = S.arcs.filter(a => { a.life -= rdt; g.strokeStyle = `rgba(${LIME},${a.life * 6})`; g.lineWidth = 1.2; g.beginPath(); g.moveTo(a.x1, a.y1); g.lineTo((a.x1 + a.x2) / 2 + rnd(-8, 8), (a.y1 + a.y2) / 2 + rnd(-8, 8)); g.lineTo(a.x2, a.y2); g.stroke(); return a.life > 0 })
+      S.rings = S.rings.filter(r => { r.life -= rdt; r.r += rdt * 260; g.strokeStyle = `rgba(${LIME},${r.life * 3})`; g.lineWidth = 2; g.beginPath(); g.arc(r.x, r.y, r.r, 0, 7); g.stroke(); return r.life > 0 })
       S.fx = S.fx.filter(p => { p.x += p.vx * rdt; p.y += p.vy * rdt; p.vx *= 0.96; p.vy *= 0.96; p.life -= rdt; g.fillStyle = `rgba(${p.col},${Math.min(1, p.life * 2)})`; g.fillRect(p.x - 1, p.y - 1, 2, 2); return p.life > 0 })
       g.font = '11px "JetBrains Mono", monospace'; g.textAlign = 'center'
       S.texts = S.texts.filter(x => { x.y -= 30 * rdt; x.life -= rdt; g.fillStyle = `rgba(${LIME},${Math.min(1, x.life * 2)})`; g.fillText(x.s, x.x, x.y); return x.life > 0 })

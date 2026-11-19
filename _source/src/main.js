@@ -277,7 +277,15 @@ const hero = (() => {
 
   cv.addEventListener('mousemove', e => { const rc = cv.getBoundingClientRect(); mouse.x = e.clientX - rc.left; mouse.y = e.clientY - rc.top })
   cv.addEventListener('mouseleave', () => { mouse.x = mouse.y = -1e4 })
+  // while the X is shown, one click sends it back to the name right away
+  let xTl = null
+  function cancelX() {
+    if (!xTl) return
+    xTl.kill(); xTl = null
+    gsap.to(hero.st, { m: 0, duration: 0.7, ease: 'power3.out', onComplete: respawn })
+  }
   addEventListener('pointerdown', e => {
+    if (xTl && hero.st.m > 0.05 && !e.target.closest('a, button')) return cancelX()
     if (gaming) return                                   // the game handles its own controls
     if (!rogue || caught) return
     if (Math.hypot(e.clientX - rogue.x, e.clientY - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return startBow(e)
@@ -416,7 +424,7 @@ const hero = (() => {
     caught = true; document.documentElement.style.cursor = ''; shots = []
     exits = hunters.map(h => ({ x: h.x, y: h.y, ang: Math.atan2(h.vy, h.vx) || 0, spin: 0, t: 0, vx: 0, vy: 0, done: false })); hunters = []
     tstep.textContent = 'caught'
-    gsap.timeline()
+    xTl = gsap.timeline({ onComplete: () => { xTl = null } })
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
       .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 2.2 })
       .add(respawn)
