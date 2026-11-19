@@ -6,8 +6,8 @@
   <title>Aurèle Habbard</title>
   <meta name="description" content="Aurèle Habbard. M2DS at École Polytechnique. LLMs, diffusion models, optimization." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23c8ff00'/></svg>" />
-  <script type="module" crossorigin src="/assets/index-8XTN-QZq.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DcNtv5cW.css">
+  <script type="module" crossorigin src="/assets/index-qyePh91R.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-rQS5q408.css">
 </head>
 <body>
   <!-- loader -->
@@ -39,7 +39,7 @@
       <div class="meta-mid mono"><span id="tstep">t = 1000</span></div>
       <div class="meta-right">
         <span class="mono">Paris</span>
-        <span>LLMs · Diffusion · Optim</span>
+        <span>Diffusion · Optimization</span>
       </div>
     </div>
     <div class="scroll-hint mono">scroll to add noise ↓</div>
@@ -50,7 +50,7 @@
     <div class="about-photo"><img src="photo.jpg" alt="Aurèle Habbard" /></div>
     <div class="about-text">
       <p class="label mono">(01) About</p>
-      <h2 class="reveal-words">I'm Aurèle. I study data science at École Polytechnique. I work on LLMs, diffusion models and optimization.</h2>
+      <h2 class="reveal-words">I'm Aurèle. I study data science at École Polytechnique. I work on diffusion models and optimization.</h2>
       <p class="sub">Before that, a research internship at Thales on generative models, and 600+ hours teaching maths.</p>
     </div>
   </section>
@@ -58,8 +58,8 @@
   <!-- MARQUEE -->
   <div class="marquee">
     <div class="marquee-track">
-      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
-      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+      <span>Diffusion</span><i>✦</i><span>Generative models</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+      <span>Diffusion</span><i>✦</i><span>Generative models</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
     </div>
   </div>
 
@@ -93,7 +93,7 @@
         </div>
         <div class="proj" data-hover>
           <div class="proj-num">03</div>
-          <div class="proj-visual v3"><canvas class="mini" data-kind="anchors"></canvas></div>
+          <div class="proj-visual v3"><canvas class="mini" data-kind="fpn"></canvas></div>
           <div class="proj-body">
             <h3>RetinaNet from scratch</h3>
             <p>Full re-implementation at Hanyang University. Anchors, FPN, classification and regression heads, focal loss, training and evaluation. No detection library.</p>
@@ -108,26 +108,36 @@
   <!-- LAB -->
   <section class="lab" id="lab">
     <p class="label mono">(03) Lab</p>
-    <h2 class="big-title"><span class="line">Small</span><span class="line outline">experiments</span></h2>
-    <div class="lab-grid">
-      <div class="demo">
-        <div class="demo-head"><h4>Forward diffusion</h4><span class="mono" id="tVal">t = 0.00</span></div>
-        <canvas id="diff" width="700" height="700"></canvas>
-        <div class="ctrl">
-          <input type="range" id="tSlider" min="0" max="1000" value="0" />
-          <div class="seg" id="shape">
-            <button class="on" data-v="spiral">spiral</button><button data-v="moons">moons</button><button data-v="rings">rings</button>
-          </div>
+    <h2 class="big-title"><span class="line">Inside a</span><span class="line outline">diffusion model</span></h2>
+    <div class="dm">
+      <div class="dm-top">
+        <div class="seg" id="dm-pick">
+          <button class="on" data-v="portrait">portrait</button><button data-v="sunset">sunset</button><button data-v="blocks">blocks</button>
+        </div>
+        <div class="dm-read mono">
+          <span>t <b id="dm-rt">0</b></span><span>ᾱ <b id="dm-ra">1.000</b></span><span>SNR <b id="dm-rs">∞</b></span>
         </div>
       </div>
-      <div class="demo">
-        <div class="demo-head"><h4>SGD vs Momentum vs Adam</h4><span class="mono" id="lrVal">lr 1e-3</span></div>
-        <canvas id="opt" width="700" height="700"></canvas>
-        <div class="ctrl">
-          <input type="range" id="lr" min="-4" max="-1.5" step="0.05" value="-3" />
-          <span class="mono dim">click to drop a point</span>
-        </div>
+      <div class="dm-stages">
+        <div class="dm-stage"><div class="dm-h mono"><span>01</span>Image x</div><canvas id="dm-img" width="400" height="400"></canvas><div class="dm-f mono">128 × 128 × 3</div></div>
+        <div class="dm-arrow mono">E →</div>
+        <div class="dm-stage"><div class="dm-h mono"><span>02</span>Latent z_t</div><canvas id="dm-lat" width="400" height="400"></canvas><div class="dm-f mono">32 × 32 × 3 · false colour</div></div>
+        <div class="dm-arrow mono">ε̂ →</div>
+        <div class="dm-stage"><div class="dm-h mono"><span>03</span>Guess of z₀</div><canvas id="dm-pred" width="400" height="400"></canvas><div class="dm-f mono">Tweedie estimate</div></div>
+        <div class="dm-arrow mono">D →</div>
+        <div class="dm-stage"><div class="dm-h mono"><span>04</span>Output</div><canvas id="dm-out" width="400" height="400"></canvas><div class="dm-f mono">decoded pixels</div></div>
       </div>
+      <div class="dm-bar">
+        <button class="dm-btn" id="dm-enc" data-hover><i>1</i>Encode</button>
+        <button class="dm-btn" id="dm-noise" data-hover><i>2</i>Add noise</button>
+        <button class="dm-btn" id="dm-step" data-hover><i>3</i>Denoise step</button>
+        <button class="dm-btn" id="dm-run" data-hover><i>⏵</i>Run all steps</button>
+        <button class="dm-btn" id="dm-dec" data-hover><i>4</i>Decode</button>
+        <button class="dm-btn ghost" id="dm-reset" data-hover>↺</button>
+        <label class="dm-slider mono">t<input type="range" id="dm-t" min="0" max="1000" value="0" /></label>
+      </div>
+      <p class="dm-info" id="dm-info"></p>
+      <p class="dm-note mono">The forward and DDIM updates are the real ones. The denoiser is simulated: it returns a blurred z₀, sharper as noise drops.</p>
     </div>
   </section>
 
