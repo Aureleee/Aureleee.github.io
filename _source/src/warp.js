@@ -13,8 +13,6 @@ export function initWarp(lenis) {
   if (!wrap || !mq || !track || !sign) return
   const label = sign.querySelector('.mq-x'), blurG = document.getElementById('mqblur-g')
   let x = 0, mult = 1, held = false, last = performance.now(), shown = '', busy = false
-  // the sign is a pendulum hanging from the banner
-  let th = 0.09, om = 0
 
   const fmt = m => {
     const b = m / C
@@ -25,7 +23,6 @@ export function initWarp(lenis) {
   sign.addEventListener('click', () => {
     if (busy) return
     mult *= 1.6
-    om += (Math.random() < 0.5 ? -1 : 1) * (2.2 + Math.random())   // a little knock
     if (mult >= C) blackHole()
   })
   mq.addEventListener('pointerdown', ev => { held = true; mq.classList.add('braking'); mq.setPointerCapture?.(ev.pointerId) })
@@ -59,11 +56,6 @@ export function initWarp(lenis) {
       if (sd > 0.25) { blurG.setAttribute('stdDeviation', `${sd.toFixed(2)} 0`); if (!blurOn) { track.style.filter = 'url(#mqblur)'; blurOn = true } }
       else if (blurOn) { track.style.filter = ''; blurOn = false }
       mq.style.boxShadow = beta > 0.5 ? `0 0 ${(60 * smooth(0.5, 1, beta)).toFixed(0)}px rgba(200,255,0,${(0.35 * smooth(0.5, 1, beta)).toFixed(3)})` : ''
-      // the sign leans in the wind and swings
-      const wind = Math.min(0.55, 0.08 * Math.log(Math.max(1, mult)))
-      om += (-(th - 0.09 - wind) * 18 - om * 1.1) * dt + (mult > 8 ? (Math.random() - 0.5) * Math.min(6, mult / 30) * dt : 0)
-      th += om * dt
-      sign.style.transform = `rotate(${th.toFixed(4)}rad)`
     }
     const t = fmt(Math.max(0, mult)); if (t !== shown) { shown = t; label.textContent = t }
     requestAnimationFrame(loop)
@@ -106,6 +98,7 @@ export function initWarp(lenis) {
 
     const pieces = pickPieces(W, H)
     const maxR = Math.hypot(W, H) / 2
+    let absorbEnd = 0
     const anims = pieces.map(pc => {
       const cx = pc.r.left + pc.r.width / 2, cy = pc.r.top + pc.r.height / 2
       const r0 = Math.max(1, Math.hypot(cx - hx, cy - hy)), t0 = Math.atan2(cy - hy, cx - hx)
@@ -120,83 +113,133 @@ export function initWarp(lenis) {
         })
       }
       const delay = 350 + (r0 / maxR) * 900 + Math.random() * 200
-      return { pc, cx, cy, r0, a: pc.el.animate(frames, { duration: 1700 + Math.random() * 500, delay, easing: 'cubic-bezier(.5,0,.85,.6)', fill: 'forwards' }) }
+      const duration = 1700 + Math.random() * 500
+      absorbEnd = Math.max(absorbEnd, delay + duration)
+      return { pc, cx, cy, r0, a: pc.el.animate(frames, { duration, delay, easing: 'cubic-bezier(.5,0,.85,.6)', fill: 'forwards' }) }
     })
 
-    // canvas: darkness, accretion disk, lensing ring, then the neutron star and the big bang
+    // canvas: a pinhole opens, swallows the page, then the black hole shows itself, wrapped in orbiting pixels
     const cv = document.createElement('canvas'); cv.className = 'bh-layer'
     const dpr = Math.min(2, devicePixelRatio || 1); cv.width = W * dpr; cv.height = H * dpr
     document.body.appendChild(cv)
     const g = cv.getContext('2d'); g.scale(dpr, dpr)
-    const R = Math.min(W, H) * 0.075
-    const disk = Array.from({ length: 1400 }, () => {
-      const rr = R * (1.35 + 2.2 * Math.random() ** 1.6)
-      return { rr, a: Math.random() * Math.PI * 2, w: 2.4 * (R / rr) ** 1.5, h: Math.random(), s: 0.6 + Math.random() * 1.4 }
+    const R = Math.min(W, H) * 0.075, TILT = 0.26
+    const tAppear = Math.max(2.2, absorbEnd / 1000 - 0.1)              // the hole shows up once everything is in
+    const ACCs = 'rgba(200,255,0,', FGs = 'rgba(241,239,233,'
+    // dust pulled in from the whole screen while the pinhole eats the page
+    const dust = Array.from({ length: 700 }, () => ({
+      r: Math.hypot(W, H) * (0.25 + 0.5 * Math.random()), a: Math.random() * 7, t0: Math.random() * (tAppear - 0.6),
+      s: 1 + Math.random() * 1.5, acc: Math.random() < 0.25,
+    }))
+    // pixels orbiting the hole (r, a in the disk plane), they slowly spiral in and are replaced
+    const newOrb = (outer = false) => ({
+      r: R * (outer ? 3.2 + Math.random() * 1.2 : 1.3 + 2.6 * Math.random() ** 1.4), a: Math.random() * Math.PI * 2,
+      vr: 0, s: 1.2 + Math.random() * 1.4, acc: Math.random() < 0.3,
     })
-    let debris = [], phase = 'grow', t0 = performance.now(), tClick = 0, rings = []
+    const orb = Array.from({ length: 1100 }, () => newOrb())
+    const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4 }, sparks = []
+    cv.addEventListener('pointermove', e => {
+      mouse.x = e.clientX; mouse.y = e.clientY
+      const sp = Math.hypot(mouse.x - mouse.px, mouse.y - mouse.py)
+      if (phase === 'idle' && mouse.px > -1e3) for (let k = 0; k < Math.min(4, sp / 6); k++) {
+        // the cursor sheds a few pixels; the hole captures them
+        const dx = mouse.x - hx, dy = (mouse.y - hy) / TILT
+        sparks.push({ r: Math.hypot(dx, dy), a: Math.atan2(dy, dx), vr: 0, s: 1 + Math.random() * 1.2, acc: Math.random() < 0.6, life: 1 })
+      }
+      mouse.px = mouse.x; mouse.py = mouse.y
+    })
+    let debris = [], phase = 'absorb', tClick = 0, rings = []
     const start = performance.now()
 
-    const drawDisk = (rad, front, alpha, tilt) => {
-      for (const d of disk) {
-        const sn = Math.sin(d.a)
+    const proj = (r, a, tilt) => [hx + Math.cos(a) * r, hy + Math.sin(a) * r * tilt]
+    const stepOrbit = (o, dt, boost = 1) => {
+      o.a += 2.6 * (R / Math.max(o.r, R * 0.6)) ** 1.5 * dt * boost
+      o.vr *= Math.exp(-2.5 * dt); o.r += (o.vr - R * 0.035 * boost) * dt
+      // the cursor stirs the disk: nearby pixels get pushed out a little
+      const [x, y] = proj(o.r, o.a, TILT), d = Math.hypot(x - mouse.x, y - mouse.y)
+      if (d < 70) o.vr += (70 - d) * 3 * dt * 60 / 60
+    }
+    const drawOrb = (list, rad, front, alpha) => {
+      const k = rad / R
+      for (const o of list) {
+        const sn = Math.sin(o.a)
         if ((sn > 0) !== front) continue
-        const rr = d.rr * rad / R, x = hx + Math.cos(d.a) * rr, y = hy + sn * rr * tilt
-        const dop = 0.55 + 0.45 * -Math.cos(d.a + 0.4)            // approaching side is brighter
-        const hot = d.rr < R * 1.9
-        g.fillStyle = hot ? `rgba(241,239,233,${(alpha * dop).toFixed(3)})` : `rgba(200,255,0,${(alpha * dop * 0.8).toFixed(3)})`
-        const len = Math.min(10, d.w * rr * 0.05 + 1)
-        g.save(); g.translate(x, y); g.rotate(Math.atan2(Math.cos(d.a) * tilt, -sn)); g.fillRect(-len / 2, 0, len, d.s * 0.8); g.restore()
+        const [x, y] = proj(o.r * k, o.a, TILT)
+        const dop = 0.62 + 0.38 * -Math.cos(o.a + 0.4), al = alpha * dop * (o.life ?? 1)
+        g.fillStyle = (o.acc ? ACCs : FGs) + al.toFixed(3) + ')'
+        g.fillRect(x, y, o.s, o.s)
       }
     }
     const lensRing = (rad, alpha) => {
-      // light from the far side of the disk bent over and under the hole
       g.save(); g.translate(hx, hy)
       for (let k = 0; k < 3; k++) {
-        g.beginPath(); g.ellipse(0, 0, rad * (1.28 + k * 0.18), rad * (1.12 + k * 0.16), 0, 0, Math.PI * 2)
-        g.strokeStyle = `rgba(${k ? '200,255,0' : '241,239,233'},${(alpha * (0.5 - k * 0.14)).toFixed(3)})`; g.lineWidth = k ? 1 : 2; g.stroke()
+        g.beginPath(); g.ellipse(0, 0, rad * (1.22 + k * 0.17), rad * (1.08 + k * 0.15), 0, 0, Math.PI * 2)
+        g.strokeStyle = (k ? ACCs : FGs) + (alpha * (0.55 - k * 0.15)).toFixed(3) + ')'; g.lineWidth = k ? 1 : 2; g.stroke()
       }
-      const gr = g.createRadialGradient(0, 0, rad * 0.9, 0, 0, rad * 1.7)
-      gr.addColorStop(0, `rgba(241,239,233,${(0.18 * alpha).toFixed(3)})`); gr.addColorStop(1, 'rgba(241,239,233,0)')
-      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rad * 1.7, 0, Math.PI * 2); g.fill()
+      const gr = g.createRadialGradient(0, 0, rad * 0.9, 0, 0, rad * 1.8)
+      gr.addColorStop(0, FGs + (0.16 * alpha).toFixed(3) + ')'); gr.addColorStop(1, FGs + '0)')
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, rad * 1.8, 0, Math.PI * 2); g.fill()
       g.restore()
     }
+    const hole = rad => { g.fillStyle = '#000'; g.beginPath(); g.arc(hx, hy, rad, 0, Math.PI * 2); g.fill() }
 
+    let lastNow = start
     const frame = now => {
-      const t = (now - start) / 1000, dt = 1 / 60
+      const t = (now - start) / 1000, dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now
       g.clearRect(0, 0, W, H)
-      if (phase === 'grow' || phase === 'idle') {
-        const dark = smooth(0.2, 2.6, t), rad = R * smooth(0, 1.4, t), tilt = 0.24
-        g.fillStyle = `rgba(4,4,4,${dark})`; g.fillRect(0, 0, W, H)
-        for (const d of disk) d.a += d.w * dt * (0.4 + smooth(0, 2, t))
-        const al = smooth(0.1, 1.6, t)
-        drawDisk(rad, false, al, tilt); lensRing(rad, al)
-        g.fillStyle = '#000'; g.beginPath(); g.arc(hx, hy, rad, 0, Math.PI * 2); g.fill()
-        drawDisk(rad, true, al, tilt)
-        if (t > 3.6) {
+      if (phase === 'absorb' || phase === 'idle') {
+        g.fillStyle = `rgba(4,4,4,${smooth(0.4, tAppear, t) * 0.97 + (t > tAppear ? 0.03 : 0)})`; g.fillRect(0, 0, W, H)
+        if (t < tAppear) {
+          // the pinhole: a tiny dark point with a thin bright rim, the only thing that does not move
+          const pr = 1.5 + 3.5 * smooth(0, tAppear, t)
+          const gl = g.createRadialGradient(hx, hy, pr, hx, hy, pr * 7)
+          gl.addColorStop(0, FGs + (0.35 * smooth(0, 0.6, t)).toFixed(3) + ')'); gl.addColorStop(1, FGs + '0)')
+          g.fillStyle = gl; g.beginPath(); g.arc(hx, hy, pr * 7, 0, Math.PI * 2); g.fill()
+          hole(pr)
+          for (const d of dust) {
+            const u = t - d.t0; if (u < 0) continue
+            d.r *= Math.exp(-dt * (0.6 + u * 1.6)); d.a += dt * (0.4 + 80 / (d.r + 20))
+            if (d.r < pr) continue
+            const x = hx + Math.cos(d.a) * d.r, y = hy + Math.sin(d.a) * d.r
+            g.fillStyle = (d.acc ? ACCs : FGs) + (Math.min(1, u * 2) * 0.8).toFixed(3) + ')'; g.fillRect(x, y, d.s, d.s)
+          }
+        } else {
           phase = 'idle'
-          const k = 0.18 + 0.12 * Math.sin(t * 2.2)
-          g.fillStyle = `rgba(241,239,233,${k * smooth(3.6, 4.6, t)})`
-          g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText('CLICK', hx, hy + R * 3.4)
+          // the hole appears all at once around the pinhole, overshoots slightly and settles
+          const u = t - tAppear, pop = u < 0.35 ? 1 - (1 - u / 0.35) ** 3 : 1
+          const rad = R * (pop + 0.08 * Math.sin(Math.min(u, 1.2) * 9) * Math.exp(-u * 4))
+          const al = smooth(0, 0.5, u)
+          if (u < 0.5) { g.fillStyle = FGs + ((1 - u / 0.5) * 0.25).toFixed(3) + ')'; g.fillRect(0, 0, W, H) }
+          for (const o of orb) { stepOrbit(o, dt); if (o.r < R * 1.05) Object.assign(o, newOrb(true)) }
+          for (let k = sparks.length - 1; k >= 0; k--) {
+            const o = sparks[k]; stepOrbit(o, dt, 2.2); if (o.r < R) o.life -= dt * 3; if (o.life <= 0) sparks.splice(k, 1)
+          }
+          drawOrb(orb, rad, false, al); drawOrb(sparks, rad, false, 1)
+          lensRing(rad, al); hole(rad)
+          drawOrb(orb, rad, true, al); drawOrb(sparks, rad, true, 1)
+          if (u > 1.4) {
+            const k = 0.16 + 0.1 * Math.sin(t * 2.2)
+            g.fillStyle = FGs + (k * smooth(1.4, 2.4, u)).toFixed(3) + ')'
+            g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'center'; g.fillText('CLICK', hx, hy + R * 4.6)
+          }
         }
       } else {
         const u = (now - tClick) / 1000
         g.fillStyle = `rgba(4,4,4,${1 - smooth(1.55, 2.6, u)})`; g.fillRect(0, 0, W, H)
         if (u < 0.55) {                                   // collapse: the hole and its disk fall to a point
           const k = 1 - smooth(0, 0.55, u), rad = R * k
-          for (const d of disk) d.a += d.w * dt * (2 + 8 * (1 - k))
-          drawDisk(rad, false, k, 0.24 * k); lensRing(rad, k)
-          g.fillStyle = '#000'; g.beginPath(); g.arc(hx, hy, rad, 0, Math.PI * 2); g.fill(); drawDisk(rad, true, k, 0.24 * k)
+          for (const o of orb) stepOrbit(o, dt, 4 + 10 * (1 - k))
+          drawOrb(orb, rad, false, k); lensRing(rad, k); hole(rad); drawOrb(orb, rad, true, k)
         } else if (u < 1.5) {                             // neutron star: tiny, spinning, beaming, unstable
           const v = (u - 0.55) / 0.95, rs = 3 + 2 * v + Math.sin(u * 90) * v * 1.5
           const gl = g.createRadialGradient(hx, hy, 0, hx, hy, 40 + 50 * v)
-          gl.addColorStop(0, 'rgba(255,255,255,.9)'); gl.addColorStop(0.2, `rgba(200,255,0,${0.35 + 0.3 * v})`); gl.addColorStop(1, 'rgba(200,255,0,0)')
+          gl.addColorStop(0, 'rgba(255,255,255,.9)'); gl.addColorStop(0.2, ACCs + (0.35 + 0.3 * v) + ')'); gl.addColorStop(1, ACCs + '0)')
           g.fillStyle = gl; g.beginPath(); g.arc(hx, hy, 40 + 50 * v, 0, Math.PI * 2); g.fill()
-          const ang = u * (8 + 30 * v)
-          g.save(); g.translate(hx, hy); g.rotate(ang)
+          g.save(); g.translate(hx, hy); g.rotate(u * (8 + 30 * v))
           for (const sgn of [1, -1]) {
-            const bl = g.createLinearGradient(0, 0, 0, sgn * Math.max(W, H))
-            bl.addColorStop(0, `rgba(241,239,233,${0.5 * (0.4 + v)})`); bl.addColorStop(1, 'rgba(241,239,233,0)')
-            g.fillStyle = bl; g.beginPath(); g.moveTo(-2, 0); g.lineTo(-30 - 40 * v, sgn * Math.max(W, H)); g.lineTo(30 + 40 * v, sgn * Math.max(W, H)); g.lineTo(2, 0); g.fill()
+            const L = Math.max(W, H), bl = g.createLinearGradient(0, 0, 0, sgn * L)
+            bl.addColorStop(0, FGs + (0.5 * (0.4 + v)) + ')'); bl.addColorStop(1, FGs + '0)')
+            g.fillStyle = bl; g.beginPath(); g.moveTo(-2, 0); g.lineTo(-30 - 40 * v, sgn * L); g.lineTo(30 + 40 * v, sgn * L); g.lineTo(2, 0); g.fill()
           }
           g.restore()
           g.fillStyle = '#fff'; g.beginPath(); g.arc(hx, hy, rs, 0, Math.PI * 2); g.fill()
@@ -214,14 +257,12 @@ export function initWarp(lenis) {
           g.fillStyle = `rgba(255,255,255,${(1 - smooth(0, 0.5, v)) * 0.95})`; g.fillRect(0, 0, W, H)
           for (const d0 of rings) {
             const q = v - d0; if (q < 0) continue
-            const rr = q * Math.max(W, H) * 1.1
-            g.beginPath(); g.arc(hx, hy, rr, 0, Math.PI * 2)
-            g.strokeStyle = `rgba(200,255,0,${Math.max(0, 0.6 - q * 0.6).toFixed(3)})`; g.lineWidth = 2 + 10 * Math.max(0, 0.6 - q); g.stroke()
+            g.beginPath(); g.arc(hx, hy, q * Math.max(W, H) * 1.1, 0, Math.PI * 2)
+            g.strokeStyle = ACCs + Math.max(0, 0.6 - q * 0.6).toFixed(3) + ')'; g.lineWidth = 2 + 10 * Math.max(0, 0.6 - q); g.stroke()
           }
           for (const p of debris) {
-            p.vx *= 0.975; p.vy *= 0.975; p.x += p.vx * dt; p.y += p.vy * dt
-            const al = Math.max(0, 1 - v / 1.6)
-            g.fillStyle = p.acc ? `rgba(200,255,0,${al})` : `rgba(241,239,233,${al})`; g.fillRect(p.x, p.y, p.s, p.s)
+            p.vx *= Math.exp(-1.5 * dt); p.vy *= Math.exp(-1.5 * dt); p.x += p.vx * dt; p.y += p.vy * dt
+            g.fillStyle = (p.acc ? ACCs : FGs) + Math.max(0, 1 - v / 1.6).toFixed(3) + ')'; g.fillRect(p.x, p.y, p.s, p.s)
           }
           if (v > 1.9) return finish()
         }
@@ -254,7 +295,7 @@ export function initWarp(lenis) {
         layers.forEach(l => l.getAnimations().forEach(a => a.cancel()))
         cv.remove()
         document.documentElement.style.overflow = ''; lenis?.start()
-        mult = 1; th = 0.09; om = 3; busy = false
+        mult = 1; busy = false
       }, 1700)
       g.clearRect(0, 0, W, H)
       cv.style.pointerEvents = 'none'

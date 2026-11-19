@@ -206,7 +206,7 @@ section, footer, .marquee, .work { position: relative; z-index: 1; }
 .mq-wrap { position: relative; z-index: 2; transform: rotate(-2deg) scale(1.05); }
 .marquee { user-select: none; -webkit-user-select: none; cursor: grab; }
 .marquee.braking { cursor: grabbing; }
-.mq-sign { position: absolute; top: 100%; left: 11vw; display: flex; flex-direction: column; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; transform-origin: 50% 0; will-change: transform; }
+.mq-sign { position: absolute; top: 100%; left: 11vw; transform: rotate(5deg); display: flex; flex-direction: column; align-items: center; padding: 0; border: 0; background: none; cursor: pointer; transform-origin: 50% 0; will-change: transform; }
 .mq-strings { position: relative; width: 74%; height: 16px; border-left: 1px solid rgba(241,239,233,.28); border-right: 1px solid rgba(241,239,233,.28); }
 .mq-strings::before, .mq-strings::after { content: ''; position: absolute; top: -2px; width: 3px; height: 3px; border-radius: 50%; background: rgba(11,11,11,.7); }
 .mq-strings::before { left: -2px; } .mq-strings::after { right: -2px; }
