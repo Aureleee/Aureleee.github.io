@@ -181,6 +181,7 @@ const hero = (() => {
       return e.t < 1.6
     })
     if (caught) bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; gctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; gctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
+    drawBow(dt, time, heroTop)
     // the escaping pixel
     if (rogue && !caught) {
       const q = rogue, hx = q.home[0], hy = Math.max(H * 0.25, Math.min(H * 0.7, q.home[1] + heroTop))
@@ -248,9 +249,85 @@ const hero = (() => {
   cv.addEventListener('mouseleave', () => { mouse.x = mouse.y = -1e4 })
   addEventListener('pointerdown', e => {
     if (!rogue || caught) return
-    if (Math.hypot(e.clientX - rogue.x, e.clientY - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return
+    if (Math.hypot(e.clientX - rogue.x, e.clientY - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return startBow(e)
     catchIt()
   })
+
+  /* ---------- on the hero: click, drag back like a bow, release → a laser shot the other way ---------- */
+  let bow = null, lasers = []
+  window.__rogue = () => rogue && !caught ? [rogue.x, rogue.y] : null
+  function startBow(e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return
+    if (cv.getBoundingClientRect().top < -H * 0.35) return
+    if (e.target.closest('a, button, input, .marquee, .mq-wrap')) return
+    bow = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t0: performance.now(), sparks: [] }
+    document.documentElement.classList.add('aiming')
+  }
+  addEventListener('pointermove', e => { if (bow) { bow.x = e.clientX; bow.y = e.clientY } })
+  addEventListener('pointerup', () => {
+    if (!bow) return
+    const b = bow; bow = null; document.documentElement.classList.remove('aiming')
+    const dx = b.x0 - b.x, dy = b.y0 - b.y, len = Math.hypot(dx, dy)
+    if (len < 14) return
+    const pw = Math.min(1, len / 170), ux = dx / len, uy = dy / len
+    // the ray runs to the edge of the screen
+    let tEnd = 1e5
+    for (const [o, d, lim] of [[b.x0, ux, W], [b.y0, uy, H]]) { if (d > 0) tEnd = Math.min(tEnd, (lim - o) / d); else if (d < 0) tEnd = Math.min(tEnd, -o / d) }
+    lasers.push({ x: b.x0, y: b.y0, ux, uy, tEnd, head: 0, age: 0, pw, hit: false })
+  })
+  addEventListener('blur', () => { bow = null; document.documentElement.classList.remove('aiming') })
+
+  function drawBow(dt, time) {
+    if (bow) {
+      const dx = bow.x0 - bow.x, dy = bow.y0 - bow.y, len = Math.hypot(dx, dy), pw = Math.min(1, len / 170)
+      const ux = len ? dx / len : 0, uy = len ? dy / len : 0, held = (performance.now() - bow.t0) / 1000
+      // energy gathering at the muzzle
+      if (Math.random() < 0.3 + pw) { const a = Math.random() * 7, r = 26 + Math.random() * 30; bow.sparks.push({ x: bow.x0 + Math.cos(a) * r, y: bow.y0 + Math.sin(a) * r, life: 1 }) }
+      bow.sparks = bow.sparks.filter(s => { s.x += (bow.x0 - s.x) * 6 * dt; s.y += (bow.y0 - s.y) * 6 * dt; s.life -= dt * 2.2; gctx.fillStyle = `rgba(200,255,0,${s.life * 0.8})`; gctx.fillRect(s.x - 1, s.y - 1, 2, 2); return s.life > 0 })
+      // the string, pulled back to the cursor
+      gctx.strokeStyle = 'rgba(241,239,233,.25)'; gctx.lineWidth = 1; gctx.setLineDash([2, 4])
+      gctx.beginPath(); gctx.moveTo(bow.x0, bow.y0); gctx.lineTo(bow.x, bow.y); gctx.stroke()
+      // where it will go
+      if (len > 14) {
+        gctx.strokeStyle = `rgba(200,255,0,${0.25 + 0.35 * pw})`; gctx.setLineDash([6, 6]); gctx.lineDashOffset = -time * 40
+        gctx.beginPath(); gctx.moveTo(bow.x0 + ux * 14, bow.y0 + uy * 14); gctx.lineTo(bow.x0 + ux * (60 + 260 * pw), bow.y0 + uy * (60 + 260 * pw)); gctx.stroke()
+      }
+      gctx.setLineDash([])
+      const pulse = 1 + 0.15 * Math.sin(held * (10 + 20 * pw))
+      gctx.strokeStyle = `rgba(200,255,0,${0.4 + 0.5 * pw})`; gctx.lineWidth = 1.2
+      gctx.beginPath(); gctx.arc(bow.x0, bow.y0, (12 - 6 * pw) * pulse, 0, 7); gctx.stroke()
+      gctx.fillStyle = `rgba(255,255,255,${0.3 + 0.7 * pw})`; gctx.fillRect(bow.x0 - 1.5, bow.y0 - 1.5, 3, 3)
+    }
+    lasers = lasers.filter(L => {
+      L.age += dt
+      const prev = L.head; L.head = Math.min(L.tEnd, L.head + 6000 * dt)
+      // hit test along the part of the beam drawn this frame
+      if (!L.hit && rogue && !caught) {
+        const rx = rogue.x - L.x, ry = rogue.y - L.y, along = rx * L.ux + ry * L.uy, off = Math.abs(rx * L.uy - ry * L.ux)
+        if (along > 0 && along <= L.head + 8 && off < 7 + 5 * L.pw) {
+          L.hit = true
+          for (let k = 0; k < 30; k++) { const a = Math.random() * 7, v = 80 + Math.random() * 300; bursts.push({ x: rogue.x, y: rogue.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.7 }) }
+          rogue.hit = 0.3; setTimeout(() => catchIt(), 120)
+        }
+      }
+      if (prev < L.tEnd && L.head >= L.tEnd) for (let k = 0; k < 10; k++) { const a = Math.random() * 7, v = 60 + Math.random() * 180; bursts.push({ x: L.x + L.ux * L.tEnd, y: L.y + L.uy * L.tEnd, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 }) }
+      const fade = Math.max(0, 1 - L.age / 0.45), tail = Math.max(0, L.head - (80 + 900 * L.age))
+      const x1 = L.x + L.ux * tail, y1 = L.y + L.uy * tail, x2 = L.x + L.ux * L.head, y2 = L.y + L.uy * L.head
+      gctx.save(); gctx.globalCompositeOperation = 'lighter'; gctx.lineCap = 'round'
+      gctx.shadowColor = 'rgba(200,255,0,.9)'; gctx.shadowBlur = 12 * fade
+      gctx.strokeStyle = `rgba(200,255,0,${0.55 * fade})`; gctx.lineWidth = 2.5 + 2 * L.pw
+      gctx.beginPath(); gctx.moveTo(x1, y1); gctx.lineTo(x2, y2); gctx.stroke()
+      gctx.shadowBlur = 0; gctx.strokeStyle = `rgba(255,255,255,${0.9 * fade})`; gctx.lineWidth = 1
+      gctx.beginPath(); gctx.moveTo(x1, y1); gctx.lineTo(x2, y2); gctx.stroke()
+      if (L.age < 0.12) {                                  // muzzle flash
+        const k = 1 - L.age / 0.12, gr = gctx.createRadialGradient(L.x, L.y, 0, L.x, L.y, 26 * k + 4)
+        gr.addColorStop(0, `rgba(255,255,255,${k})`); gr.addColorStop(1, 'rgba(200,255,0,0)')
+        gctx.fillStyle = gr; gctx.beginPath(); gctx.arc(L.x, L.y, 26 * k + 4, 0, 7); gctx.fill()
+      }
+      gctx.restore()
+      return L.age < 0.5
+    })
+  }
   // near the name: the X easter egg; further down the page: the pixel pops and comes back
   function catchIt() {
     if (caught) return
