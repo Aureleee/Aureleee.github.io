@@ -74,6 +74,7 @@ const hero = (() => {
       tx: x, ty: y,
       ex: randn() * s, ey: randn() * s,      // fixed noise sample
       ox: 0, oy: 0, vx: 0, vy: 0,            // mouse offset spring
+      ph: Math.random() * 0.8,
       acc: Math.random() < 0.025,
     }))
   }
@@ -84,10 +85,14 @@ const hero = (() => {
     tstep.textContent = `t = ${String(Math.round(tt * 1000)).padStart(4, '0')}`
     ctx.clearRect(0, 0, W, H)
     const cx = W / 2, cy = H * 0.45
-    const r = step() + 0.4
+    const r = step() * 0.72
+    const time = performance.now() / 1000
     for (const p of P) {
       // mouse repulsion with spring back
-      const x0 = cx + a * (p.tx - cx) + b * p.ex, y0 = cy + a * (p.ty - cy) + b * p.ey
+      // slow fluid drift: a smooth flow field, same for neighbours
+      const fx = 2.6 * Math.sin(p.ty * 0.012 + p.tx * 0.003 + time * 0.7) + 0.35 * Math.sin(time * 1.3 + p.ph * 4)
+      const fy = 2.6 * Math.cos(p.tx * 0.008 - p.ty * 0.004 + time * 0.55) + 0.35 * Math.cos(time * 1.1 + p.ph * 5)
+      const x0 = cx + a * (p.tx - cx) + b * p.ex + fx, y0 = cy + a * (p.ty - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
       p.vx += -p.ox * 0.06; p.vy += -p.oy * 0.06; p.vx *= 0.82; p.vy *= 0.82
@@ -118,7 +123,7 @@ document.fonts.load('800 80px Syne').then(() => document.fonts.ready).then(() =>
   tl.to(c, { v: 100, duration: 1.3, ease: 'power2.inOut', onUpdate: () => { countEl.textContent = Math.round(c.v) } })
     .to('.loader', { yPercent: -100, duration: 0.9, ease: 'expo.inOut' })
     .add(() => document.body.classList.remove('loading'))
-    .to({ v: 1 }, { v: 0, duration: 2.6, ease: 'power3.out', onUpdate() { hero.setT(this.targets()[0].v) } }, '-=0.5')
+    .to({ v: 1 }, { v: 0.004, duration: 2.6, ease: 'power3.out', onUpdate() { hero.setT(this.targets()[0].v) } }, '-=0.5')
     .from('.hero-meta > div, .top', { y: 30, opacity: 0, stagger: 0.08, duration: 1, ease: 'expo.out' }, '-=2')
 })
 
@@ -163,7 +168,7 @@ gsap.from('.big-title .line', {
   yPercent: 110, stagger: 0.12, duration: 1.2, ease: 'expo.out',
   scrollTrigger: { trigger: '.big-title', start: 'top 80%' },
 })
-gsap.from('.dm', { y: 80, opacity: 0, duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: '.dm', start: 'top 85%' } })
+gsap.from('.dmx', { y: 80, opacity: 0, duration: 1.2, ease: 'expo.out', scrollTrigger: { trigger: '.dmx', start: 'top 85%' } })
 
 initLab()
 
