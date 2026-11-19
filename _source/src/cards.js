@@ -132,10 +132,9 @@ function thales(cv) {
   /* tank as projected 3D boxes */
   function tankBoxes(Xc, Zc, th) {
     const boxes = [
-      [-0.08, 0.08, 0.03, 0.05, 0, 0.028], [-0.08, 0.08, -0.05, -0.03, 0, 0.028],  // tracks
-      [-0.075, 0.075, -0.034, 0.034, 0.012, 0.04],                                    // hull
-      [-0.04, 0.02, -0.024, 0.024, 0.04, 0.06],                                       // turret
-      [0.02, 0.125, -0.004, 0.004, 0.046, 0.054],                                     // barrel
+      [-0.11, 0.11, -0.06, 0.06, 0, 0.045],                                            // hull + tracks
+      [-0.05, 0.03, -0.038, 0.038, 0.045, 0.078],                                      // turret
+      [0.03, 0.19, -0.006, 0.006, 0.058, 0.067],                                       // barrel
     ]
     const c = Math.cos(th), s = Math.sin(th), camH = C / (f * 0.85)
     return boxes.map(([x0, x1, l0, l1, y0, y1]) => {
@@ -179,7 +178,7 @@ function thales(cv) {
       if (!best || sc > best.sc) best = { X, Z, sc }
     }
     best = best || { X: 0.3, Z: 2.2 }
-    const th = Math.random() * Math.PI * 2, boxes = tankBoxes(best.X, best.Z, th)
+    const th = (Math.random() < 0.5 ? 0 : Math.PI) + (Math.random() - 0.5) * 0.9, boxes = tankBoxes(best.X, best.Z, th)
     const [x0, y0, x1, y1] = bboxOf(boxes), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
     cur = { ...best, th, boxes, cx, cy, bb: [x0, y0, x1, y1], pts: tankPts(boxes, 0.35).map(([x, y]) => ({ x, y, ex: randn(), ey: randn() })) }
     clock = 0
@@ -217,8 +216,10 @@ function thales(cv) {
       ctx.strokeStyle = 'rgba(200,255,0,.45)'; ctx.setLineDash([4 / z, 4 / z]); ctx.lineWidth = 1.4 / z
       ell(R); ctx.stroke(); ctx.setLineDash([])
     }
-    if (p >= 0.64) {
+    if (p >= 0.6) {
+      ctx.globalAlpha = ease(seg(p, 0.6, 0.72))
       drawTank(c.boxes, 'rgba(241,239,233,.95)', 1.3 / z)
+      ctx.globalAlpha = 1
       const m = ease(seg(p, 0.64, 0.7)), [x0, y0, x1, y1] = c.bb, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2
       const hw = (x1 - x0) / 2 + 3, hh = (y1 - y0) / 2 + 3
       ctx.strokeStyle = ACC; ctx.lineWidth = 1.3 / z; ctx.strokeRect(cx - hw * m, cy - hh * m, 2 * hw * m, 2 * hh * m)
@@ -280,7 +281,14 @@ function retina(cv) {
       add(4, [[xb + q, y], [xbus, y], [xbus, out[1]], [out[0] + W * 0.06, out[1]]], 'OUT')
     }
     L = { C, P, paths, inp, out, xl, xr, xc, xb, xbus, q }
-    window.__retina = { el: cv, W: () => W, inp: () => L.inp, slot: i => { const pt = slots[i]; return pt ? at(pt.p, pt.d) : null } }
+    const by = e => paths.find(p => p.end === e).pts, outs = paths.filter(p => p.group === 4)
+    const up = l => [L.inp, ...['C2', 'C3', 'C4', 'C5'].slice(0, l - 1).map(k => [xl, C[k][1]])]
+    const routes = [3, 4, 5, 6, 7].map(l => {
+      const pts = l <= 5 ? [...up(l), ...by(l === 5 ? 'P5' : 'S' + l)] : [...up(5), ...by('P6'), ...(l === 7 ? by('P7') : [])]
+      return [...pts, [xr, P['P' + l][1]], ...by('H' + l), ...outs[l - 3].pts]
+    }).map(pts => ({ pts, len: pts.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0) }))
+    L.routes = routes
+    window.__retina = { el: cv, W: () => W, H: () => H, route: (i, u) => { const r = L.routes[i % L.routes.length]; return at(r, u * r.len) } }
   }
   const st = sized(cv, ({ w, h }) => { W = w; H = h; layout() })
 

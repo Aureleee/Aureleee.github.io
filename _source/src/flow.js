@@ -87,27 +87,26 @@ export function initFlow() {
       if (!T) return [cr.left, cr.top]
       const tr = T.el.getBoundingClientRect(), sx = tr.width / T.W, sy = tr.height / T.H
       const map = (x, yy) => [tr.left + (T.W / 2 + (x - T.camX) * T.z) * sx, tr.top + (T.H / 2 + (yy - T.camY) * T.z) * sy]
-      if (T.p >= 0.42 && T.p < 0.66 && T.pts.length) {
-        const m = ease(clamp01((T.p - 0.42) / 0.22)), a = Math.sin(m * Math.PI / 2), b = Math.cos(m * Math.PI / 2)
-        const q = T.pts[Math.floor(p.i / N * T.pts.length)]
-        return map(T.cx + a * (q.x - T.cx) + b * p.e1 * T.R * 0.45, T.cy + a * (q.y - T.cy) + b * p.e2 * T.R * 0.3)
-      }
-      const ang = 2 * Math.PI * p.i / N + time * 0.6, rr = T.R * (1.15 + 0.25 * p.r)
-      return map(T.cx + Math.cos(ang) * rr, T.cy + Math.sin(ang) * rr * 0.62)
+      const q = T.pts[Math.floor(p.i / N * T.pts.length)] || { x: T.cx, y: T.cy }
+      // loose orbit, each point on its own radius and speed
+      const ang = p.r * 40 + time * (0.25 + p.r * 0.5), orb = T.R * (1.4 + 2.2 * p.u)
+      const gx = T.cx + Math.cos(ang) * orb, gy = T.cy + Math.sin(ang) * orb * 0.55
+      const pull = ease(clamp01((T.p - 0.3) / 0.12))                    // gravitate → inside the mask
+      const mx = gx + (T.cx + p.e1 * T.R * 0.45 - gx) * pull, my = gy + (T.cy + p.e2 * T.R * 0.3 - gy) * pull
+      const m = ease(clamp01((T.p - 0.42) / 0.22))                      // mask → tank shape
+      const lift = ease(clamp01((T.p - 0.94) / 0.06))                   // next cycle: leave the tank
+      const k = m * (1 - lift)
+      return map(mx + (q.x - mx) * k, my + (q.y - my) * k)
     }
-    const thalesHidden = () => T && T.p >= 0.66 && T.p < 0.8
 
     // RetinaNet: one point per data packet travelling through the network, the rest wait at the input
     const RN = window.__retina
     const st4 = p => {
       if (!RN) return [cr.left, cr.top]
       const rr = RN.el.getBoundingClientRect(), k = rr.width / RN.W()
-      const q = RN.slot(p.i)
-      if (q) return [rr.left + q[0] * k, rr.top + q[1] * k]
-      const [ix, iy] = RN.inp()
-      return [rr.left + ix * k + p.e1 * 16, rr.top + iy * k + p.e2 * 8 + Math.sin(time * 2 + p.i) * 2]
+      const q = RN.route(p.i, (time * 0.22 + p.r) % 1)
+      return [rr.left + q[0] * k, rr.top + q[1] * k]
     }
-
     const lab = window.__lab?.()
     const dr = els.dm.getBoundingClientRect()
     const st5 = p => {
@@ -131,8 +130,7 @@ export function initFlow() {
 
     for (const p of P) {
       let A, B, k, scatter, stage
-      if (f > 0) { A = st5(p); B = st6(p); k = f; scatter = 60; stage = 6 }
-      else if (e > 0) { A = st4(p); B = st5(p); k = e; scatter = 60; stage = 5 }
+      if (e > 0) { A = st4(p); B = st5(p); k = e; scatter = 60; stage = 5 }
       else if (d > 0) { A = st3(p); B = st4(p); k = d; scatter = 50; stage = 4 }
       else if (c > 0) { A = st2(p); B = st3(p); k = c; scatter = 50; stage = 3 }
       else if (b > 0) { A = st1(p); B = st2(p); k = b; scatter = 40; stage = 2 }
@@ -146,7 +144,7 @@ export function initFlow() {
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {
         if (p.tx === null) { p.tx = x; p.ty = yy }
         p.tx += (x - p.tx) * 0.12; p.ty += (yy - p.ty) * 0.12; x = p.tx; yy = p.ty
-        if (thalesHidden()) alpha *= 0.0
+        if (T && T.p > 0.66 && T.p < 0.94) alpha *= 0.55
       } else { p.tx = x; p.ty = yy }
 
       // in the lab: these particles are the noise falling into the latent
@@ -159,7 +157,6 @@ export function initFlow() {
         } else if (lab.phase !== 'idle' && lab.phase !== 'encode') continue
       }
       const col = p.acc ? ACC : FG
-      if (stage === 6 && ek >= 1) alpha = 0.9
       if (alpha <= 0.01 || yy < -20 || yy > H + 20) continue
       ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`
       ctx.fillRect(x, yy, p.s, p.s)

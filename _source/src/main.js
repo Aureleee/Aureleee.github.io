@@ -176,7 +176,7 @@ const hero = (() => {
         h.cool -= dt
         if (h.cool <= 0 && dist < 420) {
           const v = 430, tt2 = dist / v, ax = q.x + q.vx * tt2 * 0.8 - h.x, ay = q.y + q.vy * tt2 * 0.8 - h.y, an = Math.hypot(ax, ay) + 1e-3
-          shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 1.4 })
+          shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 99 })
           h.cool = 0.8 + Math.random() * 0.9
         }
         const ang = Math.atan2(uy, ux)
@@ -191,11 +191,12 @@ const hero = (() => {
         // blasts shove the particles of the name they fly through
         for (const p of P) {
           const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - (p.ty + p.oy)
-          if (dxp * dxp + dyp * dyp < 500) { p.vx -= dxp * 0.25 + s.vx * 0.012; p.vy -= dyp * 0.25 + s.vy * 0.012 }
+          if (dxp * dxp + dyp * dyp < 220) { p.vx -= dxp * 0.08 + s.vx * 0.004; p.vy -= dyp * 0.08 + s.vy * 0.004 }
         }
         if (Math.hypot(s.x - q.x, s.y - q.y) < 8) {
           q.hit = 0.35; q.vx += s.vx * 0.9; q.vy += s.vy * 0.9
           for (let k = 0; k < 14; k++) { const a2 = Math.random() * 7, v2 = 60 + Math.random() * 160; bursts.push({ x: q.x, y: q.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.5 }) }
+          setTimeout(() => triggerX(), 250)
           return false
         }
         const n = Math.hypot(s.vx, s.vy)
@@ -208,7 +209,7 @@ const hero = (() => {
       // tiny hint: shown for a few seconds, then only when the cursor gets close
       q.h0 = q.h0 ?? time
       const near = Math.hypot(q.x - mouse.x, q.y - mouse.y)
-      const ha = Math.max(Math.max(0, 1 - (time - q.h0 - 6) / 2) * Math.min(1, (time - q.h0) / 1), near < 280 ? 1 - near / 280 : 0) * 0.7
+      const ha = Math.max(Math.max(0, 1 - (time - q.h0 - 2.5) / 1.5) * Math.min(1, (time - q.h0) / 1), near < 280 ? 1 - near / 280 : 0) * 0.7
       if (ha > 0.02) { ctx.font = '11px JetBrains Mono'; ctx.fillStyle = `rgba(200,255,0,${ha})`; ctx.fillText('catch me', q.x + 12, q.y - 10) }
       cv.style.cursor = Math.hypot(q.x - mouse.x, q.y - mouse.y) < 26 ? 'pointer' : ''
     }
@@ -221,13 +222,17 @@ const hero = (() => {
     if (!rogue || caught) return
     const rc = cv.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top
     if (Math.hypot(x - rogue.x, y - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return
-    caught = true; cv.style.cursor = ''
+    triggerX()
+  })
+  function triggerX() {
+    if (caught) return
+    caught = true; cv.style.cursor = ''; shots = []
     tstep.textContent = 'caught'
     gsap.timeline()
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
       .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
       .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9) })
-  })
+  }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
 
   return {
