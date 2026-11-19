@@ -357,14 +357,15 @@ export function initLab() {
   }
   function sources() {
     if (!dots) buildDots()
-    const fwd = phase === 'forward', u = fwd ? pt / DUR.forward : 0, tm = performance.now() / 1000
-    if (phase !== 'idle' && phase !== 'encode' && !fwd) return
+    const tm = performance.now() / 1000, uf = phase === 'forward' ? pt / DUR.forward : phase === 'idle' || phase === 'encode' ? 0 : 9
+    const ur = phase === 'reverse' ? pt / DUR.reverse : phase === 'decode' || phase === 'done' ? 9 : 0
     for (const d of dots) {
-      const k = fwd ? clamp01((u - d.delay) / 0.5) : 0
+      // ε empties into z_T while noise is added; the prompt is consumed step by step while denoising
+      const k = d.kind === 'n' ? clamp01((uf - d.delay) / 0.5) : clamp01((ur - d.delay * 1.9) / 0.12)
       if (k >= 1) continue
       let x = d.x + Math.sin(tm * 1.3 + d.ph) * 0.45, y = d.y + Math.cos(tm * 1.1 + d.ph * 1.7) * 0.45
       if (k > 0) {
-        const e = easeIO(k), w = 1 - e, cx = (x + d.tx) / 2 + d.bend, cy = Math.min(y, d.ty) - lay.fs * 2
+        const e = easeIO(k), w = 1 - e, cx = (x + d.tx) / 2 + d.bend, cy = Math.min(y, d.ty) - lay.fs * (d.kind === 'p' ? 0.5 : 2)
         x = w * w * x + 2 * w * e * cx + e * e * d.tx; y = w * w * y + 2 * w * e * cy + e * e * d.ty
       }
       ctx.globalAlpha = (d.kind === 'n' ? 0.8 : 0.92) * (1 - k * k)
