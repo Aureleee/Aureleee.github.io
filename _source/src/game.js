@@ -388,8 +388,8 @@ export function initGame({ lenis }) {
           if (T.keep && d < T.keep) sp *= -0.4                   // gunners keep their distance and circle
           let vx = dx / d * sp, vy = dy / d * sp
           if (T.keep) { vx += -dy / d * 30; vy += dx / d * 30 }
-          if (e.type === 'zig' || e.type === 'swarm') { const w = e.type === 'zig' ? 70 : 40; vx += -dy / d * Math.sin(t * 4 + e.ph) * w; vy += dx / d * Math.sin(t * 4 + e.ph) * w }
-          if (e.type === 'drift') { vx += Math.sin(t * 1.3 + e.ph) * 14; vy += Math.cos(t * 1.1 + e.ph) * 14 }
+          if (e.type === 'zig' || e.type === 'swarm') { const w = (e.type === 'zig' ? 60 : 35) * Math.min(1, Math.max(0, (d - 260) / 300)); vx += -dy / d * Math.sin(t * 3 + e.ph) * w; vy += dx / d * Math.sin(t * 3 + e.ph) * w }   // they weave far away, then come straight
+          if (e.type === 'drift' && d > 260) { vx += Math.sin(t * 1.3 + e.ph) * 12; vy += Math.cos(t * 1.1 + e.ph) * 12 }
           if (S.perks.has('frost') && d < 200) { vx *= 0.55; vy *= 0.55 }
           e.x += vx * dt; e.y += vy * dt
           if (T.gun) {

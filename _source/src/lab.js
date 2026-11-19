@@ -146,24 +146,24 @@ export function initLab() {
 
   /* ---------- layout ---------- */
   function layout() {
-    srcPts = null
+    dots = null
     const cw = cv.clientWidth, dpr = Math.min(2, devicePixelRatio || 1), mob = cw < 700
     W = Math.round(cw * dpr); H = Math.round(W * (mob ? 1.95 : 0.47))
     cv.width = W; cv.height = H; cv.style.height = H / dpr + 'px'
     if (!mob) {
-      H = Math.round(W * 0.5); cv.height = H; cv.style.height = H / dpr + 'px'
-      const P = W * 0.17, Pz = W * 0.12, top = H * 0.3, cy = top + P / 2
+      H = Math.round(W * 0.47); cv.height = H; cv.style.height = H / dpr + 'px'
+      const P = W * 0.17, Pz = W * 0.12, top = H * 0.25, cy = top + P / 2
       lay = { img: [W * 0.1 - P / 2, top, P], lat: [W * 0.37 - Pz / 2, cy - Pz / 2, Pz], lat2: [W * 0.63 - Pz / 2, cy - Pz / 2, Pz], out: [W * 0.9 - P / 2, top, P],
         tl: [W * 0.07, top + P + H * 0.15, W * 0.86], film: [0, top + P + H * 0.23, 0, W * 0.86 / 21 * 0.9], fs: W / 100 }
-      lay.nb = [W * 0.37 - W * 0.075, H * 0.03, W * 0.15, H * 0.13]
-      lay.pb = [W * 0.6 - W * 0.13, H * 0.03, W * 0.26, H * 0.13]
+      lay.nb = [W * 0.37 - W * 0.07, H * 0.02, W * 0.14, H * 0.16]
+      lay.pb = [W * 0.47, H * 0.02, W * 0.22, H * 0.16]
     } else {
       H = Math.round(W * 2.25); cv.height = H; cv.style.height = H / dpr + 'px'
       const P = W * 0.56, Pz = W * 0.36, y1 = H * 0.03, y2 = y1 + P + H * 0.17, y3 = y2 + Pz + H * 0.11
       lay = { img: [W / 2 - P / 2, y1, P], lat: [W * 0.27 - Pz / 2, y2, Pz], lat2: [W * 0.73 - Pz / 2, y2, Pz], out: [W / 2 - P / 2, y3, P],
         tl: [W * 0.07, y3 + P + H * 0.05, W * 0.86], film: [0, y3 + P + H * 0.08, 0, W * 0.86 / 21 * 0.9], fs: W / 32 }
-      lay.nb = [W * 0.27 - W * 0.16, y1 + P + H * 0.035, W * 0.32, H * 0.05]
-      lay.pb = [W * 0.73 - W * 0.2, y1 + P + H * 0.035, W * 0.4, H * 0.05]
+      lay.nb = [W * 0.27 - W * 0.17, y1 + P + H * 0.02, W * 0.34, H * 0.08]
+      lay.pb = [W * 0.73 - W * 0.22, y1 + P + H * 0.02, W * 0.44, H * 0.08]
     }
   }
 
@@ -215,7 +215,7 @@ export function initLab() {
     } else if (phase === 'reverse') {
       const k = clamp01(pt / DUR.reverse)
       reverseState(1 - easeIO(k) * 0.35 - k * 0.65)
-      rippleT += dt; if (rippleT > 0.3) { rippleT = 0; pulses.push({ k: 0 }); const [mx, my, mP] = lay.lat2; ripples.push({ x: mx + mP / 2, y: my + mP / 2, r: mP * 0.1, a: 0.45 }) }
+      rippleT += dt; if (rippleT > 0.3) { rippleT = 0; const [mx, my, mP] = lay.lat2; ripples.push({ x: mx + mP / 2, y: my + mP / 2, r: mP * 0.1, a: 0.45 }) }
       // the denoising step lives in latent space: cells of z_t travel to z_{t-Δ}, crossing paths
       emitAcc += dt * 700
       const [ax, ay, aP] = lay.lat, [bx, by, bP] = lay.lat2
@@ -322,69 +322,57 @@ export function initLab() {
       return Math.tanh(v / Math.max(1, Math.sqrt(words.length)) * 1.6)
     })
   }
-  // the two sources above: ε ~ N(0, I) on the left feeds z_T, the prompt on the right feeds c = E(prompt)
-  const tunnelPts = () => {
-    const { nb, pb, lat, lat2 } = lay
-    return {
-      n: [nb[0] + nb[2] / 2, nb[1] + nb[3], lat[0] + lat[2] / 2, lat[1] - lay.fs * 1.8],
-      p: [pb[0] + pb[2] / 2, pb[1] + pb[3], lat2[0] + lat2[2] / 2, lat2[1] - lay.fs * 1.8],
+  // the two sources, made of dots: ε ~ N(0, I) (its name and its bell curve) and the prompt.
+  // During the forward pass every dot leaves: the noise dots fill z_T, the prompt dots go into the denoiser.
+  let dots = null
+  function buildDots() {
+    const { nb, pb, lat, lat2 } = lay, o = document.createElement('canvas'); o.width = W; o.height = H
+    const g = o.getContext('2d'), fs = lay.fs
+    const sample = (box, draw, tgt, kind) => {
+      g.clearRect(0, 0, W, H); draw(g)
+      const [x0, y0, w, h] = box, d = g.getImageData(x0 | 0, y0 | 0, Math.ceil(w), Math.ceil(h)).data, st = Math.max(2, Math.round(W / 1400)), out = []
+      for (let y = 0; y < h; y += st) for (let x = 0; x < w; x += st) {
+        const a = d[4 * ((y | 0) * Math.ceil(w) + (x | 0)) + 3]; if (a < 110) continue
+        const c = Math.floor(Math.random() * L * L)
+        out.push({ x: x0 + x, y: y0 + y, kind, s: st * 0.85, ph: Math.random() * 7, delay: Math.random() * 0.45, tx: tgt[0] + ((c % L) + 0.5) * tgt[2] / L, ty: tgt[1] + (Math.floor(c / L) + 0.5) * tgt[2] / L, bend: (Math.random() - 0.5) * W * 0.06 })
+      }
+      return out
     }
+    const noise = sample(nb, g => {
+      g.fillStyle = '#fff'; g.font = `600 ${fs * 1.7}px Inter, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'top'
+      g.fillText('ε ∼ 𝒩(0, I)', nb[0] + nb[2] / 2, nb[1] + 2)
+      g.strokeStyle = '#fff'; g.lineWidth = Math.max(2, fs * 0.25); g.beginPath()
+      for (let i = 0; i <= 60; i++) { const u = i / 60, z = (u - 0.5) * 6, xx = nb[0] + nb[2] * (0.08 + 0.84 * u), yy = nb[1] + nb[3] * 0.95 - Math.exp(-z * z / 2) * nb[3] * 0.55; i ? g.lineTo(xx, yy) : g.moveTo(xx, yy) }
+      g.stroke()
+    }, lat, 'n')
+    const prompt = sample(pb, g => {
+      const words = PROMPT.split(' '), lines = [words.slice(0, 4).join(' '), words.slice(4, 8).join(' '), words.slice(8).join(' ')]
+      let size = pb[3] * 0.26
+      g.font = `600 ${size}px Inter, sans-serif`
+      const widest = Math.max(...lines.map(l => g.measureText(l).width)); if (widest > pb[2] * 0.98) size *= pb[2] * 0.98 / widest
+      g.fillStyle = '#fff'; g.font = `600 ${size}px Inter, sans-serif`; g.textAlign = 'left'; g.textBaseline = 'top'
+      lines.forEach((l, i) => g.fillText(l, pb[0], pb[1] + i * size * 1.22))
+    }, lat2, 'p')
+    dots = [...noise, ...prompt]
   }
   function sources() {
-    const { nb, pb } = lay, fs = lay.fs, T = tunnelPts(), on = phase === 'forward'
-    const tube = ([x0, y0, x1, y1], hot) => {
-      const ym = (y0 + y1) / 2, w = fs * 0.9
-      for (const o of [-w, w]) { ctx.strokeStyle = hot ? 'rgba(200,255,0,.35)' : '#242423'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 + o, y0); ctx.bezierCurveTo(x0 + o, ym, x1 + o, ym, x1 + o, y1); ctx.stroke() }
-      ctx.setLineDash([3, 7]); ctx.lineDashOffset = -performance.now() / 25; ctx.strokeStyle = hot ? ACC : '#2e2e2c'
-      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(x0, ym, x1, ym, x1, y1); ctx.stroke(); ctx.setLineDash([])
+    if (!dots) buildDots()
+    const fwd = phase === 'forward', u = fwd ? pt / DUR.forward : 0, tm = performance.now() / 1000
+    if (phase !== 'idle' && phase !== 'encode' && !fwd) return
+    for (const d of dots) {
+      const k = fwd ? clamp01((u - d.delay) / 0.5) : 0
+      if (k >= 1) continue
+      let x = d.x + Math.sin(tm * 1.3 + d.ph) * 0.45, y = d.y + Math.cos(tm * 1.1 + d.ph * 1.7) * 0.45
+      if (k > 0) {
+        const e = easeIO(k), w = 1 - e, cx = (x + d.tx) / 2 + d.bend, cy = Math.min(y, d.ty) - lay.fs * 2
+        x = w * w * x + 2 * w * e * cx + e * e * d.tx; y = w * w * y + 2 * w * e * cy + e * e * d.ty
+      }
+      ctx.globalAlpha = (d.kind === 'n' ? 0.8 : 0.92) * (1 - k * k)
+      ctx.fillStyle = k > 0.2 ? ACC : '#f1efe9'; ctx.fillRect(x - d.s / 2, y - d.s / 2, d.s, d.s)
     }
-    tube(T.n, on); tube(T.p, on)
-    const box = ([x, y, w, h]) => { ctx.strokeStyle = on ? '#4a4a46' : '#242423'; ctx.lineWidth = 1.5; ctx.strokeRect(x, y, w, h) }
-    box(nb); box(pb)
-    ctx.font = `${fs * 0.8}px JetBrains Mono`; ctx.textAlign = 'left'; ctx.fillStyle = '#5a5a55'
-    ctx.fillText('ε ∼ 𝒩(0, I)', nb[0] + fs * 0.6, nb[1] + fs * 1.3); ctx.fillText('prompt', pb[0] + fs * 0.6, pb[1] + fs * 1.3)
-    // faint guides under the points
-    ctx.globalAlpha = 0.18; ctx.strokeStyle = '#8b8b84'; ctx.lineWidth = 1; ctx.beginPath()
-    for (let i = 0; i <= 40; i++) { const [xx, yy] = bell(i / 40); i ? ctx.lineTo(xx, yy) : ctx.moveTo(xx, yy) }
-    ctx.stroke()
-    const words = PROMPT.split(' '), lines = [words.slice(0, 4).join(' '), words.slice(4, 8).join(' '), words.slice(8).join(' ')]
-    const size = Math.min(pb[3] * 0.2, pb[2] / 15)
-    ctx.globalAlpha = phase === 'idle' || phase === 'encode' ? 0.14 : 0.3; ctx.fillStyle = '#f1efe9'; ctx.font = `600 ${size}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    lines.forEach((l, i) => ctx.fillText(l, pb[0] + pb[2] / 2, pb[1] + pb[3] * (0.42 + i * 0.22)))
-    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left'; ctx.globalAlpha = 1
+    ctx.globalAlpha = 1
   }
-  // the bell curve inside the noise box (u in 0..1 along x), and the prompt laid out in the prompt box
-  const bell = u => { const { nb } = lay, z = (u - 0.5) * 6; return [nb[0] + nb[2] * (0.1 + 0.8 * u), nb[1] + nb[3] * 0.9 - Math.exp(-z * z / 2) * nb[3] * 0.62] }
-  let srcPts = null
-  function sampleSources() {
-    const { nb, pb } = lay, fs = lay.fs
-    // noise: points on the curve and under it
-    const n = []
-    for (let k = 0; k < 400; k++) {
-      const u = Math.random(), [x, y] = bell(u), base = nb[1] + nb[3] * 0.9
-      n.push(Math.random() < 0.55 ? [x, y] : [x, y + (base - y) * Math.random()])
-    }
-    // prompt: the pixels of the text
-    const o = document.createElement('canvas'); o.width = Math.ceil(pb[2]); o.height = Math.ceil(pb[3])
-    const g = o.getContext('2d'), words = PROMPT.split(' '), lines = [words.slice(0, 4).join(' '), words.slice(4, 8).join(' '), words.slice(8).join(' ')]
-    const size = Math.min(pb[3] * 0.2, pb[2] / 15)
-    g.font = `600 ${size}px Inter, sans-serif`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
-    lines.forEach((l, i) => g.fillText(l, o.width / 2, o.height * (0.42 + i * 0.22)))
-    const d = g.getImageData(0, 0, o.width, o.height).data, pts = [], st = Math.max(1, Math.round(size / 9))
-    for (let y = 0; y < o.height; y += st) for (let x = 0; x < o.width; x += st) if (d[4 * (y * o.width + x) + 3] > 120) pts.push([pb[0] + x, pb[1] + y])
-    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[pts[i], pts[j]] = [pts[j], pts[i]] }
-    srcPts = { n, p: pts }
-    void fs
-  }
-  function context() {
-    const T = tunnelPts().p, [x0, y0, x1, y1] = T, ym = (y0 + y1) / 2
-    for (const q of pulses) {
-      const u = easeIO(q.k), w = 1 - u
-      const px = w * w * w * x0 + 3 * w * w * u * x0 + 3 * w * u * u * x1 + u * u * u * x1, py = w * w * w * y0 + 3 * w * w * u * ym + 3 * w * u * u * ym + u * u * u * y1
-      ctx.fillStyle = ACC; ctx.globalAlpha = Math.sin(q.k * Math.PI); ctx.fillRect(px - 2, py - 2, 4, 4); ctx.globalAlpha = 1
-    }
-    if (phase === 'reverse') { ctx.font = `${lay.fs * 0.8}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = '#6a6a64'; ctx.fillText('conditioning', x1, y1 + lay.fs * 1.1 - lay.fs * 3.2); ctx.textAlign = 'left' }
-  }
+  function context() {}
 
   function draw() {
     ctx.fillStyle = '#0b0b0b'; ctx.fillRect(0, 0, W, H)
@@ -437,5 +425,6 @@ export function initLab() {
   gsap.ticker.add((_, dt) => { if (!visible || !lay) return; if (z0 && phase !== 'idle' && phase !== 'done') update(Math.min(dt, 50) / 1000); draw() })
 
   window.__dm = () => ({ phase, pt, t })
-  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; if (!srcPts) sampleSources(); const T = tunnelPts(); return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), lat2: lay.lat2.map(v => v / k), tn: T.n.map(v => v / k), tp: T.p.map(v => v / k), srcN: srcPts.n, srcP: srcPts.p, k } }
+  // the site's own flowing points land on the dots of the two sources and melt into them
+  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; if (!dots) buildDots(); return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), dots, k } }
 }

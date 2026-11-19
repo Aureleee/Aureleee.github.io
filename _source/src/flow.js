@@ -191,8 +191,8 @@ export function initFlow() {
       if (!lab) return [dr.left + dr.width / 2, dr.top]
       const [lx, ly, lp] = lab.lat
       // the points draw the two sources: half of them the bell curve of ε ~ N(0, I), half the prompt; a slight fluid drift
-      const src = p.i % 2 ? lab.srcP : lab.srcN, q = src[(p.i >> 1) % src.length], k = lab.k
-      return [dr.left + q[0] / k + Math.sin(time * 1.1 + p.i * 0.7) * 1.2, dr.top + q[1] / k + Math.cos(time * 0.9 + p.i * 1.3) * 1.2]
+      const q = lab.dots[(p.hk % lab.dots.length)], k = lab.k
+      return [dr.left + q.x / k, dr.top + q.y / k]
     }
     // half of the cloud diffuses into the latent (the Gaussian noise), the other half encodes the prompt
     const cell = p => {
@@ -247,22 +247,8 @@ export function initFlow() {
         }
       } else { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
 
-      // in the lab: these particles are the noise falling into the latent
-      if (stage === 5 && ek >= 1 && lab) {
-        if (lab.phase === 'forward') {
-          const fr = clamp01((lab.tau - p.r * 0.55) / 0.45)
-          if (fr >= 1) continue
-          // cloud → into its source → down its tunnel → into a cell (latent noise, or the prompt vector)
-          const T = p.i % 2 ? lab.tp : lab.tn, C = cell(p)
-          const ex = dr.left + T[0], ey = dr.top + T[1], ox = dr.left + T[2], oy = dr.top + T[3]
-          if (fr < 0.35) { const u = (fr / 0.35) ** 1.5; x += (ex - x) * u; yy += (ey - yy) * u }
-          else if (fr < 0.85) {
-            const u = (fr - 0.35) / 0.5, w = 1 - u, ym = (ey + oy) / 2, j = Math.sin(p.i * 7.1) * 6
-            x = w * w * w * ex + 3 * w * w * u * ex + 3 * w * u * u * ox + u * u * u * ox + j
-            yy = w * w * w * ey + 3 * w * w * u * ym + 3 * w * u * u * ym + u * u * u * oy
-          } else { const u = (fr - 0.85) / 0.15; x = ox + (C[0] - ox) * u; yy = oy + (C[1] - oy) * u }
-        } else if (lab.phase !== 'idle' && lab.phase !== 'encode') continue
-      }
+      // in the lab: the points land on the dots of the noise and the prompt, and melt into them
+      if (stage === 5 && lab) { alpha *= 1 - ek ** 2; if (ek >= 1) continue }
       if (alpha <= 0.01 || yy < -20 || yy > H + 20) continue
       ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`
       ctx.fillRect(x, yy, p.s, p.s)
