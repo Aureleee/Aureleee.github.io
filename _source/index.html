@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurèle Habbard</title>
+  <meta name="description" content="Aurèle Habbard. M2DS at École Polytechnique. LLMs, diffusion models, optimization." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23c8ff00'/></svg>" />
+</head>
+<body>
+  <!-- loader -->
+  <div class="loader">
+    <div class="loader-count"><span id="count">0</span></div>
+    <div class="loader-label">denoising</div>
+  </div>
+
+  <div class="cursor"></div>
+
+  <header class="top">
+    <a href="#" class="mark">AH<span>.</span></a>
+    <nav>
+      <a href="#about" data-hover>About</a>
+      <a href="#work" data-hover>Work</a>
+      <a href="#lab" data-hover>Lab</a>
+      <a href="cv.pdf" target="_blank" data-hover>CV</a>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <canvas id="particles"></canvas>
+    <div class="hero-meta">
+      <div class="meta-left">
+        <span class="mono">M2DS</span>
+        <span>École Polytechnique</span>
+      </div>
+      <div class="meta-mid mono"><span id="tstep">t = 1000</span></div>
+      <div class="meta-right">
+        <span class="mono">Paris</span>
+        <span>LLMs · Diffusion · Optim</span>
+      </div>
+    </div>
+    <div class="scroll-hint mono">scroll to add noise ↓</div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="about" id="about">
+    <div class="about-photo"><img src="photo.jpg" alt="Aurèle Habbard" /></div>
+    <div class="about-text">
+      <p class="label mono">(01) About</p>
+      <h2 class="reveal-words">I'm Aurèle. I study data science at École Polytechnique. I work on LLMs, diffusion models and optimization.</h2>
+      <p class="sub">Before that, a research internship at Thales on generative models, and 600+ hours teaching maths.</p>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <div class="marquee">
+    <div class="marquee-track">
+      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+    </div>
+  </div>
+
+  <!-- WORK : horizontal scroll -->
+  <section class="work" id="work">
+    <div class="work-pin">
+      <div class="work-head">
+        <p class="label mono">(02) Selected work</p>
+        <p class="mono work-progress"><span id="wp">01</span> / 03</p>
+      </div>
+      <div class="work-track">
+        <a class="proj" href="https://github.com/Aureleee/synctweedies-flow" target="_blank" data-hover>
+          <div class="proj-num">01</div>
+          <div class="proj-visual v1"><canvas class="mini" data-kind="tiles"></canvas></div>
+          <div class="proj-body">
+            <h3>SyncTweedies, flow edition</h3>
+            <p>Re-implementation of SyncTweedies (NeurIPS 2024) as a ComfyUI sampler. Large images from overlapping views, synced at each step by averaging Tweedie estimates. Extended to flow matching with FLUX 3 Klein, and to histology with PixCell.</p>
+            <div class="chips"><span>Diffusion</span><span>Flow matching</span><span>ComfyUI</span></div>
+            <span class="go mono">github ↗</span>
+          </div>
+        </a>
+        <div class="proj" data-hover>
+          <div class="proj-num">02</div>
+          <div class="proj-visual v2"><canvas class="mini" data-kind="insert"></canvas></div>
+          <div class="proj-body">
+            <h3>Synthetic data at Thales</h3>
+            <p>End-to-end pipeline for synthetic image generation in an air-gapped setting. Diffusion, LoRA fine-tuning, custom ComfyUI nodes, object insertion in RGB and infrared scenes, COCO export. Runs on 4× A6000.</p>
+            <div class="chips"><span>LoRA</span><span>Z-Image-Turbo</span><span>Docker</span></div>
+            <span class="go mono">internal · 2026</span>
+          </div>
+        </div>
+        <div class="proj" data-hover>
+          <div class="proj-num">03</div>
+          <div class="proj-visual v3"><canvas class="mini" data-kind="anchors"></canvas></div>
+          <div class="proj-body">
+            <h3>RetinaNet from scratch</h3>
+            <p>Full re-implementation at Hanyang University. Anchors, FPN, classification and regression heads, focal loss, training and evaluation. No detection library.</p>
+            <div class="chips"><span>Detection</span><span>PyTorch</span></div>
+            <span class="go mono">Seoul · 2025</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAB -->
+  <section class="lab" id="lab">
+    <p class="label mono">(03) Lab</p>
+    <h2 class="big-title"><span class="line">Small</span><span class="line outline">experiments</span></h2>
+    <div class="lab-grid">
+      <div class="demo">
+        <div class="demo-head"><h4>Forward diffusion</h4><span class="mono" id="tVal">t = 0.00</span></div>
+        <canvas id="diff" width="700" height="700"></canvas>
+        <div class="ctrl">
+          <input type="range" id="tSlider" min="0" max="1000" value="0" />
+          <div class="seg" id="shape">
+            <button class="on" data-v="spiral">spiral</button><button data-v="moons">moons</button><button data-v="rings">rings</button>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><h4>SGD vs Momentum vs Adam</h4><span class="mono" id="lrVal">lr 1e-3</span></div>
+        <canvas id="opt" width="700" height="700"></canvas>
+        <div class="ctrl">
+          <input type="range" id="lr" min="-4" max="-1.5" step="0.05" value="-3" />
+          <span class="mono dim">click to drop a point</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATH -->
+  <section class="path">
+    <p class="label mono">(04) Path</p>
+    <ul class="rows">
+      <li data-hover><span class="r-when mono">2026 — 27</span><span class="r-what">M2 Data Science</span><span class="r-where">École Polytechnique</span></li>
+      <li data-hover><span class="r-when mono">2026</span><span class="r-what">Research intern, generative models</span><span class="r-where">Thales LAS</span></li>
+      <li data-hover><span class="r-when mono">2024 —</span><span class="r-what">Maths & ML instructor</span><span class="r-where">Alveus</span></li>
+      <li data-hover><span class="r-when mono">2025</span><span class="r-what">Exchange semester</span><span class="r-where">Hanyang University, Seoul</span></li>
+      <li data-hover><span class="r-when mono">2025 — 26</span><span class="r-what">Core curriculum</span><span class="r-where">École 42</span></li>
+    </ul>
+  </section>
+
+  <!-- CONTACT -->
+  <footer class="contact">
+    <p class="label mono">(05) Contact</p>
+    <a class="huge" href="mailto:aurele.habbard@polytechnique.edu" data-hover>
+      <span class="huge-line">Say</span><span class="huge-line accent">hello ↗</span>
+    </a>
+    <div class="contact-links">
+      <a class="magnet" href="cv.pdf" target="_blank" data-hover><span>Download CV</span></a>
+      <a class="magnet ghost" href="https://github.com/Aureleee" target="_blank" data-hover><span>GitHub</span></a>
+      <a class="magnet ghost" href="https://www.linkedin.com/in/aur%C3%A8le-habbard-979189227" target="_blank" data-hover><span>LinkedIn</span></a>
+    </div>
+    <div class="foot mono"><span>© <span id="yr"></span> Aurèle Habbard</span><span id="clock"></span></div>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

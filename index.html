@@ -1,396 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aurèle Habbard</title>
-<meta name="description" content="Aurèle Habbard. M2 Data Science student at École Polytechnique. LLMs, diffusion, optimization.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0d0f12;
-    --bg2: #14171c;
-    --line: #23272f;
-    --text: #e6e8eb;
-    --muted: #8b929c;
-    --accent: #d97757;
-    --accent2: #6ea8fe;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: Inter, system-ui, sans-serif;
-    line-height: 1.6;
-    font-size: 16px;
-  }
-  a { color: inherit; text-decoration: none; }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 0 24px; }
-
-  nav {
-    position: sticky; top: 0; z-index: 10;
-    background: rgba(13,15,18,.85);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--line);
-  }
-  nav .wrap { display: flex; justify-content: space-between; align-items: center; height: 56px; }
-  nav .logo { font-family: 'JetBrains Mono', monospace; font-weight: 500; }
-  nav .logo span { color: var(--accent); }
-  nav ul { display: flex; gap: 22px; list-style: none; font-size: 14px; color: var(--muted); }
-  nav ul a:hover { color: var(--text); }
-
-  header { padding: 80px 0 60px; }
-  .hero { display: flex; gap: 40px; align-items: center; }
-  .avatar {
-    width: 160px; height: 160px; border-radius: 50%; flex-shrink: 0;
-    border: 2px solid var(--line);
-    background: var(--bg2) center/cover no-repeat;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 48px; font-weight: 700; color: var(--accent);
-    overflow: hidden;
-  }
-  .avatar img { width: 100%; height: 100%; object-fit: cover; }
-  h1 { font-size: 42px; line-height: 1.1; letter-spacing: -0.02em; }
-  .tagline { color: var(--muted); margin: 12px 0 22px; font-size: 17px; }
-  .tagline b { color: var(--text); font-weight: 500; }
-  .links { display: flex; flex-wrap: wrap; gap: 10px; }
-  .btn {
-    font-size: 14px; padding: 8px 14px; border-radius: 8px;
-    border: 1px solid var(--line); background: var(--bg2);
-    transition: border-color .15s, transform .15s;
-  }
-  .btn:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .btn.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
-
-  section { padding: 56px 0; border-top: 1px solid var(--line); }
-  h2 {
-    font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 500;
-    color: var(--accent); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 28px;
-  }
-  p + p { margin-top: 12px; }
-  .muted { color: var(--muted); }
-
-  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-  .tag {
-    font-family: 'JetBrains Mono', monospace; font-size: 12px;
-    padding: 4px 10px; border-radius: 999px;
-    background: var(--bg2); border: 1px solid var(--line); color: var(--muted);
-  }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
-  .card {
-    background: var(--bg2); border: 1px solid var(--line); border-radius: 12px;
-    padding: 20px; display: flex; flex-direction: column; gap: 10px;
-    transition: border-color .15s, transform .15s;
-  }
-  .card:hover { border-color: #3a404b; transform: translateY(-2px); }
-  .card h3 { font-size: 17px; }
-  .card p { font-size: 14px; color: var(--muted); flex: 1; }
-  .card .tags { margin-top: 4px; }
-  .card .go { font-size: 13px; color: var(--accent2); }
-
-  .timeline { display: flex; flex-direction: column; gap: 22px; }
-  .item { display: grid; grid-template-columns: 140px 1fr; gap: 20px; }
-  .item .when { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--muted); padding-top: 2px; }
-  .item h3 { font-size: 16px; }
-  .item .where { color: var(--muted); font-size: 14px; }
-  .item p { font-size: 14px; color: var(--muted); margin-top: 6px; }
-
-  .lab { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .demo { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
-  .demo h3 { font-size: 16px; margin-bottom: 4px; }
-  .demo .hint { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
-  canvas { width: 100%; aspect-ratio: 1; display: block; border-radius: 8px; background: #0a0c0f; cursor: crosshair; }
-  .ctrl { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
-  .ctrl input[type=range] { flex: 1; accent-color: var(--accent); }
-  .ctrl select, .ctrl button {
-    background: var(--bg); color: var(--text); border: 1px solid var(--line);
-    border-radius: 6px; padding: 4px 8px; font: inherit; cursor: pointer;
-  }
-
-  footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; text-align: center; }
-
-  @media (max-width: 720px) {
-    nav ul { display: none; }
-    .hero { flex-direction: column; text-align: center; }
-    .links { justify-content: center; }
-    h1 { font-size: 34px; }
-    .lab { grid-template-columns: 1fr; }
-    .item { grid-template-columns: 1fr; gap: 4px; }
-  }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aurèle Habbard</title>
+  <meta name="description" content="Aurèle Habbard. M2DS at École Polytechnique. LLMs, diffusion models, optimization." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23c8ff00'/></svg>" />
+  <script type="module" crossorigin src="/assets/index-8XTN-QZq.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DcNtv5cW.css">
 </head>
 <body>
+  <!-- loader -->
+  <div class="loader">
+    <div class="loader-count"><span id="count">0</span></div>
+    <div class="loader-label">denoising</div>
+  </div>
 
-<nav>
-  <div class="wrap">
-    <a href="#" class="logo">aurele<span>.</span>habbard</a>
-    <ul>
-      <li><a href="#about">About</a></li>
-      <li><a href="#projects">Projects</a></li>
-      <li><a href="#lab">Lab</a></li>
-      <li><a href="#path">Path</a></li>
-      <li><a href="cv.pdf" target="_blank">CV</a></li>
+  <div class="cursor"></div>
+
+  <header class="top">
+    <a href="#" class="mark">AH<span>.</span></a>
+    <nav>
+      <a href="#about" data-hover>About</a>
+      <a href="#work" data-hover>Work</a>
+      <a href="#lab" data-hover>Lab</a>
+      <a href="cv.pdf" target="_blank" data-hover>CV</a>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <canvas id="particles"></canvas>
+    <div class="hero-meta">
+      <div class="meta-left">
+        <span class="mono">M2DS</span>
+        <span>École Polytechnique</span>
+      </div>
+      <div class="meta-mid mono"><span id="tstep">t = 1000</span></div>
+      <div class="meta-right">
+        <span class="mono">Paris</span>
+        <span>LLMs · Diffusion · Optim</span>
+      </div>
+    </div>
+    <div class="scroll-hint mono">scroll to add noise ↓</div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="about" id="about">
+    <div class="about-photo"><img src="photo.jpg" alt="Aurèle Habbard" /></div>
+    <div class="about-text">
+      <p class="label mono">(01) About</p>
+      <h2 class="reveal-words">I'm Aurèle. I study data science at École Polytechnique. I work on LLMs, diffusion models and optimization.</h2>
+      <p class="sub">Before that, a research internship at Thales on generative models, and 600+ hours teaching maths.</p>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <div class="marquee">
+    <div class="marquee-track">
+      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+      <span>LLMs</span><i>✦</i><span>Diffusion</span><i>✦</i><span>Flow matching</span><i>✦</i><span>Optimal transport</span><i>✦</i><span>RL</span><i>✦</i><span>CUDA</span><i>✦</i><span>PyTorch</span><i>✦</i>
+    </div>
+  </div>
+
+  <!-- WORK : horizontal scroll -->
+  <section class="work" id="work">
+    <div class="work-pin">
+      <div class="work-head">
+        <p class="label mono">(02) Selected work</p>
+        <p class="mono work-progress"><span id="wp">01</span> / 03</p>
+      </div>
+      <div class="work-track">
+        <a class="proj" href="https://github.com/Aureleee/synctweedies-flow" target="_blank" data-hover>
+          <div class="proj-num">01</div>
+          <div class="proj-visual v1"><canvas class="mini" data-kind="tiles"></canvas></div>
+          <div class="proj-body">
+            <h3>SyncTweedies, flow edition</h3>
+            <p>Re-implementation of SyncTweedies (NeurIPS 2024) as a ComfyUI sampler. Large images from overlapping views, synced at each step by averaging Tweedie estimates. Extended to flow matching with FLUX 3 Klein, and to histology with PixCell.</p>
+            <div class="chips"><span>Diffusion</span><span>Flow matching</span><span>ComfyUI</span></div>
+            <span class="go mono">github ↗</span>
+          </div>
+        </a>
+        <div class="proj" data-hover>
+          <div class="proj-num">02</div>
+          <div class="proj-visual v2"><canvas class="mini" data-kind="insert"></canvas></div>
+          <div class="proj-body">
+            <h3>Synthetic data at Thales</h3>
+            <p>End-to-end pipeline for synthetic image generation in an air-gapped setting. Diffusion, LoRA fine-tuning, custom ComfyUI nodes, object insertion in RGB and infrared scenes, COCO export. Runs on 4× A6000.</p>
+            <div class="chips"><span>LoRA</span><span>Z-Image-Turbo</span><span>Docker</span></div>
+            <span class="go mono">internal · 2026</span>
+          </div>
+        </div>
+        <div class="proj" data-hover>
+          <div class="proj-num">03</div>
+          <div class="proj-visual v3"><canvas class="mini" data-kind="anchors"></canvas></div>
+          <div class="proj-body">
+            <h3>RetinaNet from scratch</h3>
+            <p>Full re-implementation at Hanyang University. Anchors, FPN, classification and regression heads, focal loss, training and evaluation. No detection library.</p>
+            <div class="chips"><span>Detection</span><span>PyTorch</span></div>
+            <span class="go mono">Seoul · 2025</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LAB -->
+  <section class="lab" id="lab">
+    <p class="label mono">(03) Lab</p>
+    <h2 class="big-title"><span class="line">Small</span><span class="line outline">experiments</span></h2>
+    <div class="lab-grid">
+      <div class="demo">
+        <div class="demo-head"><h4>Forward diffusion</h4><span class="mono" id="tVal">t = 0.00</span></div>
+        <canvas id="diff" width="700" height="700"></canvas>
+        <div class="ctrl">
+          <input type="range" id="tSlider" min="0" max="1000" value="0" />
+          <div class="seg" id="shape">
+            <button class="on" data-v="spiral">spiral</button><button data-v="moons">moons</button><button data-v="rings">rings</button>
+          </div>
+        </div>
+      </div>
+      <div class="demo">
+        <div class="demo-head"><h4>SGD vs Momentum vs Adam</h4><span class="mono" id="lrVal">lr 1e-3</span></div>
+        <canvas id="opt" width="700" height="700"></canvas>
+        <div class="ctrl">
+          <input type="range" id="lr" min="-4" max="-1.5" step="0.05" value="-3" />
+          <span class="mono dim">click to drop a point</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PATH -->
+  <section class="path">
+    <p class="label mono">(04) Path</p>
+    <ul class="rows">
+      <li data-hover><span class="r-when mono">2026 — 27</span><span class="r-what">M2 Data Science</span><span class="r-where">École Polytechnique</span></li>
+      <li data-hover><span class="r-when mono">2026</span><span class="r-what">Research intern, generative models</span><span class="r-where">Thales LAS</span></li>
+      <li data-hover><span class="r-when mono">2024 —</span><span class="r-what">Maths & ML instructor</span><span class="r-where">Alveus</span></li>
+      <li data-hover><span class="r-when mono">2025</span><span class="r-what">Exchange semester</span><span class="r-where">Hanyang University, Seoul</span></li>
+      <li data-hover><span class="r-when mono">2025 — 26</span><span class="r-what">Core curriculum</span><span class="r-where">École 42</span></li>
     </ul>
-  </div>
-</nav>
+  </section>
 
-<header>
-  <div class="wrap hero">
-    <div class="avatar"><img src="photo.jpg" alt="Aurèle Habbard" onerror="this.remove();this.parentNode && (this.parentNode.textContent='AH')"></div>
-    <div>
-      <h1>Aurèle Habbard</h1>
-      <p class="tagline"><b>M2 Data Science</b> at École Polytechnique. I work on generative models, LLMs and optimization. Heading for a PhD.</p>
-      <div class="links">
-        <a class="btn primary" href="cv.pdf" target="_blank">Download CV</a>
-        <a class="btn" href="https://github.com/Aureleee" target="_blank">GitHub</a>
-        <a class="btn" href="https://www.linkedin.com/in/aur%C3%A8le-habbard-979189227" target="_blank">LinkedIn</a>
-        <a class="btn" href="mailto:aurele.habbard@polytechnique.edu">Email</a>
-      </div>
+  <!-- CONTACT -->
+  <footer class="contact">
+    <p class="label mono">(05) Contact</p>
+    <a class="huge" href="mailto:aurele.habbard@polytechnique.edu" data-hover>
+      <span class="huge-line">Say</span><span class="huge-line accent">hello ↗</span>
+    </a>
+    <div class="contact-links">
+      <a class="magnet" href="cv.pdf" target="_blank" data-hover><span>Download CV</span></a>
+      <a class="magnet ghost" href="https://github.com/Aureleee" target="_blank" data-hover><span>GitHub</span></a>
+      <a class="magnet ghost" href="https://www.linkedin.com/in/aur%C3%A8le-habbard-979189227" target="_blank" data-hover><span>LinkedIn</span></a>
     </div>
-  </div>
-</header>
+    <div class="foot mono"><span>© <span id="yr"></span> Aurèle Habbard</span><span id="clock"></span></div>
+  </footer>
 
-<section id="about">
-  <div class="wrap">
-    <h2>// About</h2>
-    <p>I come from HPC. I ended up in generative AI by building things that had to run on real hardware, with real VRAM limits.</p>
-    <p>Right now I'm mostly into LLMs as a whole: how they're trained, how they reason, how to make them reliable. I also spent a lot of time on diffusion models, and I like optimization, optimal transport and RL.</p>
-    <p>Long term goal: research. Ideally at a lab like Anthropic.</p>
-    <div class="tags">
-      <span class="tag">LLMs</span><span class="tag">Diffusion</span><span class="tag">Optimal transport</span>
-      <span class="tag">RL</span><span class="tag">Computer vision</span><span class="tag">HPC / CUDA</span>
-      <span class="tag">PyTorch</span><span class="tag">ComfyUI</span><span class="tag">Docker</span>
-    </div>
-  </div>
-</section>
-
-<section id="projects">
-  <div class="wrap">
-    <h2>// Projects</h2>
-    <div class="grid">
-      <div class="card">
-        <h3>Synthetic vehicle dataset generation</h3>
-        <p>Fully local diffusion pipeline to insert vehicles into real road scenes. Perspective estimation, road detection, LoRA on Z-Image-Turbo, COCO annotations out. Built to train detection models.</p>
-        <div class="tags"><span class="tag">Z-Image-Turbo</span><span class="tag">LoRA</span><span class="tag">ControlNet</span><span class="tag">ComfyUI</span></div>
-      </div>
-      <div class="card">
-        <h3>Local LLM prompt rewriting</h3>
-        <p>Qwen3.8-27B running on-prem to rewrite generation prompts. Two-pass scheduling to avoid model reload ping-pong under tight VRAM.</p>
-        <div class="tags"><span class="tag">Qwen3.8-27B</span><span class="tag">On-prem</span><span class="tag">Multi-GPU</span></div>
-      </div>
-      <div class="card">
-        <h3>CS2 market prediction</h3>
-        <p>Side project. Predicting price moves of CS2 cases and skins from market history. Started with cases, the most liquid items.</p>
-        <div class="tags"><span class="tag">Time series</span><span class="tag">Python</span></div>
-      </div>
-      <div class="card">
-        <h3>Overnight video generation</h3>
-        <p>Custom ComfyUI node package to chain prompts and run batch video generation overnight without babysitting.</p>
-        <div class="tags"><span class="tag">ComfyUI</span><span class="tag">Video diffusion</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="lab">
-  <div class="wrap">
-    <h2>// Lab</h2>
-    <p class="muted" style="margin-bottom:22px">Small interactive toys. Everything runs in your browser.</p>
-    <div class="lab">
-      <div class="demo">
-        <h3>Forward diffusion</h3>
-        <p class="hint">Drag t. Watch the data turn into a Gaussian.</p>
-        <canvas id="diff" width="600" height="600"></canvas>
-        <div class="ctrl">
-          <span>t</span><input type="range" id="tSlider" min="0" max="1000" value="0">
-          <span id="tVal">0.00</span>
-          <select id="shape"><option>spiral</option><option>moons</option><option>rings</option></select>
-        </div>
-      </div>
-      <div class="demo">
-        <h3>Optimizers on Rosenbrock</h3>
-        <p class="hint">Click anywhere to drop a starting point.</p>
-        <canvas id="opt" width="600" height="600"></canvas>
-        <div class="ctrl">
-          <span>lr</span><input type="range" id="lr" min="-4" max="-1.5" step="0.05" value="-3">
-          <span id="lrVal">1e-3</span>
-          <button id="clear">clear</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="path">
-  <div class="wrap">
-    <h2>// Path</h2>
-    <div class="timeline">
-      <div class="item">
-        <div class="when">2026 – 2027</div>
-        <div><h3>M2 Data Science (M2DS)</h3><div class="where">École Polytechnique, IP Paris</div>
-          <p>Generative models, NLP & LLMs, optimization, RL, deep learning.</p></div>
-      </div>
-      <div class="item">
-        <div class="when">Apr – Sep 2026</div>
-        <div><h3>Generative AI engineer intern</h3><div class="where">Thales LAS</div>
-          <p>Local diffusion pipeline for synthetic image generation. LoRA, ControlNet, segmentation and depth models, local LLM, containerized on multi-GPU servers.</p></div>
-      </div>
-      <div class="item">
-        <div class="when">2024 – now</div>
-        <div><h3>Tutor & software engineer</h3><div class="where">Alveus</div>
-          <p>600+ hours teaching advanced maths and intro to ML. Also on the tech side.</p></div>
-      </div>
-      <div class="item">
-        <div class="when">Exchange</div>
-        <div><h3>Exchange semester</h3><div class="where">Hanyang University, Seoul</div></div>
-      </div>
-      <div class="item">
-        <div class="when">Before</div>
-        <div><h3>Engineering degree, HPC & AI track</h3><div class="where">Ranked 1st in the HPC track. Also time at École 42.</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<footer>
-  <div class="wrap">© <span id="yr"></span> Aurèle Habbard · Hosted on GitHub Pages</div>
-</footer>
-
-<script>
-document.getElementById('yr').textContent = new Date().getFullYear();
-
-/* ---------- Forward diffusion ---------- */
-(() => {
-  const cv = document.getElementById('diff'), ctx = cv.getContext('2d');
-  const W = cv.width, N = 1500;
-  const slider = document.getElementById('tSlider'), tVal = document.getElementById('tVal'), shapeSel = document.getElementById('shape');
-  const randn = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
-  let x0 = [], eps = [];
-
-  function sample(shape) {
-    const pts = [];
-    for (let i = 0; i < N; i++) {
-      let x, y;
-      if (shape === 'spiral') {
-        const r = Math.sqrt(Math.random()) * 1.6, a = r * 4.5;
-        x = r * Math.cos(a); y = r * Math.sin(a);
-      } else if (shape === 'moons') {
-        const a = Math.random() * Math.PI;
-        if (i % 2) { x = Math.cos(a) - 0.5; y = Math.sin(a) - 0.25; }
-        else { x = 0.5 - Math.cos(a); y = 0.25 - Math.sin(a); }
-      } else {
-        const a = Math.random() * 2 * Math.PI, r = i % 2 ? 0.6 : 1.4;
-        x = r * Math.cos(a); y = r * Math.sin(a);
-      }
-      pts.push([x + 0.04 * randn(), y + 0.04 * randn()]);
-    }
-    return pts;
-  }
-  function reset() { x0 = sample(shapeSel.value); eps = x0.map(() => [randn(), randn()]); draw(); }
-
-  function draw() {
-    const t = slider.value / 1000;
-    // cosine schedule: alpha_bar(t)
-    const ab = Math.cos((t + 0.008) / 1.008 * Math.PI / 2) ** 2;
-    const a = Math.sqrt(ab), s = Math.sqrt(1 - ab);
-    tVal.textContent = t.toFixed(2);
-    ctx.fillStyle = '#0a0c0f'; ctx.fillRect(0, 0, W, W);
-    ctx.strokeStyle = '#1b1f26'; ctx.beginPath();
-    ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
-    const scale = W / 7;
-    const hue = 20 + 200 * t;
-    ctx.fillStyle = `hsla(${hue}, 75%, 62%, .75)`;
-    for (let i = 0; i < N; i++) {
-      const x = a * x0[i][0] + s * eps[i][0], y = a * x0[i][1] + s * eps[i][1];
-      ctx.fillRect(W / 2 + x * scale - 1.5, W / 2 - y * scale - 1.5, 3, 3);
-    }
-    ctx.fillStyle = '#8b929c'; ctx.font = '22px JetBrains Mono, monospace';
-    ctx.fillText(`ᾱ = ${ab.toFixed(3)}`, 16, 34);
-  }
-  slider.oninput = draw; shapeSel.onchange = reset; reset();
-})();
-
-/* ---------- Optimizers on Rosenbrock ---------- */
-(() => {
-  const cv = document.getElementById('opt'), ctx = cv.getContext('2d');
-  const W = cv.width, xmin = -2, xmax = 2, ymin = -1, ymax = 3;
-  const lrS = document.getElementById('lr'), lrV = document.getElementById('lrVal');
-  const f = (x, y) => (1 - x) ** 2 + 100 * (y - x * x) ** 2;
-  const g = (x, y) => [-2 * (1 - x) - 400 * x * (y - x * x), 200 * (y - x * x)];
-  const toPx = (x, y) => [(x - xmin) / (xmax - xmin) * W, (1 - (y - ymin) / (ymax - ymin)) * W];
-  const toW = (px, py) => [xmin + px / W * (xmax - xmin), ymin + (1 - py / W) * (ymax - ymin)];
-
-  const bg = document.createElement('canvas'); bg.width = bg.height = W;
-  (() => {
-    const b = bg.getContext('2d'), img = b.createImageData(W, W);
-    for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) {
-      const [x, y] = toW(i, j), v = Math.log(1 + f(x, y)) / 8;
-      const band = (Math.log(1 + f(x, y)) * 2.5) % 1 < 0.06 ? 25 : 0;
-      const k = 4 * (j * W + i);
-      img.data[k] = 10 + 30 * v + band; img.data[k + 1] = 12 + 40 * v + band; img.data[k + 2] = 18 + 70 * v + band; img.data[k + 3] = 255;
-    }
-    b.putImageData(img, 0, 0);
-  })();
-
-  let runs = [];
-  const opts = [
-    { name: 'SGD', color: '#e6e8eb' },
-    { name: 'Momentum', color: '#6ea8fe' },
-    { name: 'Adam', color: '#d97757' },
-  ];
-
-  function start(x, y) {
-    const lr = 10 ** +lrS.value;
-    runs = opts.map(o => ({ ...o, p: [x, y], path: [[x, y]], v: [0, 0], m: [0, 0], s: [0, 0], k: 0, lr }));
-  }
-  function step(r) {
-    let [dx, dy] = g(...r.p);
-    const n = Math.hypot(dx, dy); if (n > 1e3) { dx *= 1e3 / n; dy *= 1e3 / n; }
-    r.k++;
-    if (r.name === 'SGD') { r.p = [r.p[0] - r.lr * dx, r.p[1] - r.lr * dy]; }
-    else if (r.name === 'Momentum') {
-      r.v = [0.9 * r.v[0] + dx, 0.9 * r.v[1] + dy];
-      r.p = [r.p[0] - r.lr * r.v[0], r.p[1] - r.lr * r.v[1]];
-    } else {
-      const b1 = 0.9, b2 = 0.999, lr = r.lr * 30;
-      r.m = [b1 * r.m[0] + (1 - b1) * dx, b1 * r.m[1] + (1 - b1) * dy];
-      r.s = [b2 * r.s[0] + (1 - b2) * dx * dx, b2 * r.s[1] + (1 - b2) * dy * dy];
-      const c1 = 1 - b1 ** r.k, c2 = 1 - b2 ** r.k;
-      r.p = [r.p[0] - lr * (r.m[0] / c1) / (Math.sqrt(r.s[0] / c2) + 1e-8),
-             r.p[1] - lr * (r.m[1] / c1) / (Math.sqrt(r.s[1] / c2) + 1e-8)];
-    }
-    if (r.path.length < 4000 && r.p.every(Number.isFinite)) r.path.push([...r.p]);
-  }
-  function draw() {
-    ctx.drawImage(bg, 0, 0);
-    const [ox, oy] = toPx(1, 1);
-    ctx.strokeStyle = '#7ee787'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(ox - 9, oy); ctx.lineTo(ox + 9, oy); ctx.moveTo(ox, oy - 9); ctx.lineTo(ox, oy + 9); ctx.stroke();
-    ctx.font = '20px JetBrains Mono, monospace';
-    runs.forEach((r, i) => {
-      for (let s = 0; s < 5; s++) step(r);
-      ctx.strokeStyle = r.color; ctx.lineWidth = 2; ctx.beginPath();
-      r.path.forEach((p, k) => { const [px, py] = toPx(...p); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
-      ctx.stroke();
-      ctx.fillStyle = r.color;
-      ctx.fillText(`${r.name.padEnd(9)} f=${f(...r.p).toExponential(1)}`, 16, 34 + 26 * i);
-    });
-    if (!runs.length) { ctx.fillStyle = '#8b929c'; ctx.fillText('click to start', 16, 34); }
-    requestAnimationFrame(draw);
-  }
-  cv.addEventListener('click', e => {
-    const r = cv.getBoundingClientRect();
-    start(...toW((e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * W));
-  });
-  lrS.oninput = () => { lrV.textContent = (10 ** +lrS.value).toExponential(0); if (runs.length) start(...runs[0].path[0]); };
-  document.getElementById('clear').onclick = () => runs = [];
-  lrV.textContent = (10 ** +lrS.value).toExponential(0);
-  start(-1.5, 2.5);
-  draw();
-})();
-</script>
 </body>
 </html>
