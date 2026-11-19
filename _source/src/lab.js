@@ -181,7 +181,7 @@ export function initLab() {
       say('Forward process. Noise seeps in, cell by cell, until nothing of the face is left.')
     } else if (phase === 'forward') {
       const tau = clamp01(pt / DUR.forward); forwardState(tau)
-      if (tau < 0.95) for (let k = 0; k < 3; k++) { const c = Math.floor(Math.random() * L * L); sparks.push({ x: lx + (c % L + 0.5) * Pz / L, y: ly - Pz * 0.35, ty: ly + (Math.floor(c / L) + 0.5) * Pz / L, v: Pz * 1.6 }) }
+      if (tau < 0.95) for (let k = 0; k < 1; k++) { const c = Math.floor(Math.random() * L * L); sparks.push({ x: lx + (c % L + 0.5) * Pz / L, y: ly - Pz * 0.35, ty: ly + (Math.floor(c / L) + 0.5) * Pz / L, v: Pz * 1.6 }) }
       if (pt > DUR.forward) { reverseState(1); z2.set(zt); phase = 'reverse'; pt = 0; highlight(2); say('Reverse process. Start from pure Gaussian noise z_T and denoise, step by step, in latent space.') }
     } else if (phase === 'reverse') {
       const k = clamp01(pt / DUR.reverse)
@@ -342,4 +342,5 @@ export function initLab() {
     cv.addEventListener('pointermove', mv); cv.addEventListener('pointerup', up)
   })
   window.__dm = () => ({ phase, pt, t })
+  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k) } }
 }

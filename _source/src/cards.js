@@ -393,11 +393,7 @@ function tiles(cv) {
       ctx.strokeStyle = i % 2 ? '#333' : '#555'; ctx.lineWidth = 2
       ctx.strokeRect(x + 4, 20 + i * 6, tw - 8, h - 40 - i * 12)
     }
-    for (const [u, v, e1, e2] of pts) {
-      const x = u * w, y = h / 2 + Math.sin(u * 12 + ph * 0.5) * h * 0.18 + (v - 0.5) * h * 0.08
-      ctx.fillStyle = v > 0.94 ? ACC : 'rgba(241,239,233,.7)'
-      ctx.fillRect(x + e1 * 30 * (1 - k), y + e2 * h * 0.35 * (1 - k), 3, 3)
-    }
+    // the points of the wave come from the page-wide particle flow (flow.js)
   })
 }
 

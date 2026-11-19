@@ -9,6 +9,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { initCards } from './cards.js'
 import { initLab } from './lab.js'
+import { initFlow } from './flow.js'
 
 gsap.registerPlugin(ScrollTrigger)
 const ACC = '#c8ff00'
@@ -83,6 +84,7 @@ const hero = (() => {
     const band = (lines.length * lh) * 1.4 + H * 0.12
     WB = { y0: y0 - band / 2 - lh * 0.2, h: band + lh * (lines.length - 1) * 0.4 }
     computeX(targets.length, y0)
+    window.__heroTargets = targets
     rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4] }
     F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
       x: Math.random() * W, s: 1 + Math.random() * 1.6,
@@ -191,6 +193,7 @@ document.body.classList.add('loading')
 document.fonts.load('800 80px Syne').then(() => document.fonts.ready).then(() => {
   hero.build()
   gsap.ticker.add(hero.frame)
+  initFlow()
   const c = { v: 0 }, countEl = document.getElementById('count')
   const tl = gsap.timeline()
   tl.to(c, { v: 100, duration: 1.3, ease: 'power2.inOut', onUpdate: () => { countEl.textContent = Math.round(c.v) } })
@@ -230,7 +233,8 @@ gsap.to(track, {
   x: () => -dist(), ease: 'none',
   scrollTrigger: {
     trigger: '.work', pin: '.work-pin', start: 'top top', end: () => '+=' + dist(), scrub: 1, invalidateOnRefresh: true,
-    onUpdate: s => { wp.textContent = '0' + Math.min(3, 1 + Math.floor(s.progress * 3)) },
+    onUpdate: s => { wp.textContent = '0' + Math.min(3, 1 + Math.floor(s.progress * 3)); window.__workProgress = s.progress },
+    onRefresh: s => { window.__workStart = s.start; window.__workEnd = s.end },
   },
 })
 
