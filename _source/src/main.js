@@ -85,9 +85,13 @@ const hero = (() => {
     computeX(targets.length, y0)
     rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4] }
     F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
-      x: Math.random() * W, y: WB.y0 + Math.random() * WB.h, s: 1 + Math.random() * 1.6,
+      x: Math.random() * W, s: 1 + Math.random() * 1.6,
       a: 0.18 + Math.random() * 0.45, acc: Math.random() < 0.12, ph: Math.random() * 10,
-    }))
+      // dense band around the name, then a tail whose density decays exponentially up to the hero edges
+      ay: Math.random() < 0.75 ? WB.y0 + Math.random() * WB.h
+        : (Math.random() < 0.5 ? WB.y0 + Math.log(Math.random()) * H * 0.09 : WB.y0 + WB.h - Math.log(Math.random()) * H * 0.09),
+    })).filter(q => q.ay > 4 && q.ay < H - 4)
+    F.forEach(q => { q.y = q.ay; const d = Math.max(0, WB.y0 - q.ay, q.ay - WB.y0 - WB.h); q.a *= Math.exp(-d / (H * 0.35)) })
   }
 
   // easter egg: the same particles can also draw the X
@@ -116,14 +120,12 @@ const hero = (() => {
     const cx = W / 2, cy = H * 0.45
     const r = step() * 0.72
     const now = performance.now(), time = now / 1000, dt = Math.min(0.05, (now - lastT) / 1000); lastT = now
-    // wanderers: advected by a slow flow field, wrapped around the band
+    // wanderers: drift sideways around their own height, wrap horizontally
     for (const q of F) {
       q.x += (26 * Math.sin(q.y * 0.012 + time * 0.45 + q.ph) + 12 * Math.cos(time * 0.3 + q.ph)) * dt
-      q.y += (14 * Math.cos(q.x * 0.009 + time * 0.5 + q.ph * 0.5)) * dt
+      q.y = q.ay + 14 * Math.sin(q.x * 0.006 + time * 0.5 + q.ph) + 6 * Math.sin(time * 0.9 + q.ph * 3)
       if (q.x < -10) q.x = W + 10; if (q.x > W + 10) q.x = -10
-      if (q.y < WB.y0) q.y = WB.y0 + WB.h; if (q.y > WB.y0 + WB.h) q.y = WB.y0
-      const edge = Math.min(q.y - WB.y0, WB.y0 + WB.h - q.y) / (WB.h * 0.2)
-      ctx.fillStyle = q.acc ? `rgba(200,255,0,${q.a * Math.min(1, edge)})` : `rgba(241,239,233,${q.a * Math.min(1, edge)})`
+      ctx.fillStyle = q.acc ? `rgba(200,255,0,${q.a})` : `rgba(241,239,233,${q.a})`
       ctx.fillRect(q.x, q.y, q.s, q.s)
     }
     for (const p of P) {
