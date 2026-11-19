@@ -15,6 +15,7 @@ const ACC = '#c8ff00'
 const isTouch = matchMedia('(hover: none)').matches
 const randn = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random())
 // cosine schedule
+const easeIO = x => x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2
 const alphaBar = t => Math.cos((t + 0.008) / 1.008 * Math.PI / 2) ** 2
 
 /* ---------- smooth scroll ---------- */
@@ -44,7 +45,7 @@ if (!isTouch) {
 const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
-  let W, H, dpr, P = [], F = [], WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
+  let W, H, dpr, P = [], F = [], M = 0, rogue = null, caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
   const mouse = { x: -1e4, y: -1e4 }
 
   function build() {
@@ -81,6 +82,18 @@ const hero = (() => {
     // free particles wandering around the name
     const band = (lines.length * lh) * 1.4 + H * 0.12
     WB = { y0: y0 - band / 2 - lh * 0.2, h: band + lh * (lines.length - 1) * 0.4 }
+    // easter egg: the same particles can also draw a big X
+    {
+      const xo = document.createElement('canvas'); xo.width = W; xo.height = H
+      const g = xo.getContext('2d'), xs = Math.min(H * 0.62, W * 0.7)
+      g.font = `800 ${xs}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
+      g.fillText('X', W / 2, H * 0.45)
+      const xd = g.getImageData(0, 0, W, H).data, xt = [], st = Math.max(2, Math.round(Math.sqrt((xs * xs * 0.3) / Math.max(1, targets.length))))
+      for (let y = 0; y < H; y += st) for (let x = 0; x < W; x += st) if (xd[4 * (y * W + x) + 3] > 128) xt.push([x, y])
+      for (let i = xt.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[xt[i], xt[j]] = [xt[j], xt[i]] }
+      P.forEach((p, i) => { const q = xt[i % xt.length]; p.xx = q[0] + (Math.random() - 0.5) * st; p.xy = q[1] + (Math.random() - 0.5) * st; p.d = Math.random() })
+    }
+    rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4] }
     F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
       x: Math.random() * W, y: WB.y0 + Math.random() * WB.h, s: 1 + Math.random() * 1.6,
       a: 0.18 + Math.random() * 0.45, acc: Math.random() < 0.12, ph: Math.random() * 10,
@@ -111,7 +124,9 @@ const hero = (() => {
       let fx = 5.5 * Math.sin(p.ty * 0.009 + p.tx * 0.0045 + time * 1.1) + 0.5 * Math.sin(time * 1.7 + p.ph * 4)
       let fy = 4.5 * Math.cos(p.tx * 0.006 - p.ty * 0.003 + time * 0.85) + 0.5 * Math.cos(time * 1.4 + p.ph * 5)
       if (p.loose) { fx += 16 * Math.sin(time * 0.8 + p.lp) + 8 * Math.sin(time * 1.9 + p.lp * 2); fy += 11 * Math.cos(time * 0.65 + p.lp * 1.3) }
-      const x0 = cx + a * (p.tx - cx) + b * p.ex + fx, y0 = cy + a * (p.ty - cy) + b * p.ey + fy
+      const m = M <= 0 ? 0 : easeIO(Math.max(0, Math.min(1, M * 1.5 - p.d * 0.5)))
+      const bx = p.tx + (p.xx - p.tx) * m, by = p.ty + (p.xy - p.ty) * m
+      const x0 = cx + a * (bx - cx) + b * p.ex + fx, y0 = cy + a * (by - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
       p.vx += -p.ox * 0.06; p.vy += -p.oy * 0.06; p.vx *= 0.82; p.vy *= 0.82
@@ -119,16 +134,44 @@ const hero = (() => {
       ctx.fillStyle = p.acc ? ACC : `rgba(241,239,233,${0.5 + 0.5 * ab})`
       ctx.fillRect(x0 + p.ox, y0 + p.oy, r, r)
     }
+    // the escaping pixel
+    if (rogue && !caught && tt < 0.3) {
+      const q = rogue, [hx, hy] = q.home
+      const wx = hx + Math.sin(time * 0.37 + q.ph) * q.span[0] + Math.sin(time * 1.3) * 30, wy = hy + Math.cos(time * 0.53 + q.ph) * q.span[1]
+      q.vx += (wx - q.x) * 0.9 * dt; q.vy += (wy - q.y) * 0.9 * dt
+      const dx = q.x - mouse.x, dy = q.y - mouse.y, d = Math.hypot(dx, dy)
+      if (d < 160) { const f = (160 - d) / 160 * 2600 * dt; q.vx += dx / (d + 1e-3) * f; q.vy += dy / (d + 1e-3) * f }
+      q.vx *= Math.pow(0.12, dt); q.vy *= Math.pow(0.12, dt)
+      q.x = Math.max(20, Math.min(W - 20, q.x + q.vx * dt)); q.y = Math.max(H * 0.12, Math.min(H * 0.8, q.y + q.vy * dt))
+      q.trail.push([q.x, q.y]); if (q.trail.length > 14) q.trail.shift()
+      q.trail.forEach(([x, y], i) => { ctx.fillStyle = `rgba(200,255,0,${(i / q.trail.length) * 0.35})`; ctx.fillRect(x - 1.5, y - 1.5, 3, 3) })
+      const pulse = 1 + 0.35 * Math.sin(time * 6)
+      ctx.strokeStyle = 'rgba(200,255,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(q.x, q.y, 9 * pulse, 0, 7); ctx.stroke()
+      ctx.fillStyle = ACC; ctx.fillRect(q.x - 3, q.y - 3, 6, 6)
+      cv.style.cursor = Math.hypot(q.x - mouse.x, q.y - mouse.y) < 26 ? 'pointer' : ''
+    }
   }
   const step = () => Math.max(2, Math.round(W / 520))
 
   cv.addEventListener('mousemove', e => { const rc = cv.getBoundingClientRect(); mouse.x = e.clientX - rc.left; mouse.y = e.clientY - rc.top })
   cv.addEventListener('mouseleave', () => { mouse.x = mouse.y = -1e4 })
+  cv.addEventListener('pointerdown', e => {
+    if (!rogue || caught) return
+    const rc = cv.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top
+    if (Math.hypot(x - rogue.x, y - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return
+    caught = true; cv.style.cursor = ''
+    tstep.textContent = 'caught'
+    gsap.timeline()
+      .to(hero.st, { m: 1, duration: 1.8, ease: 'power2.inOut' })
+      .to(hero.st, { m: 0, duration: 1.8, ease: 'power2.inOut', delay: 3.5 })
+      .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9) })
+  })
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
 
   return {
     build, frame,
     setT: v => { t = v }, setScroll: v => { scrollT = v },
+    st: { get m() { return M }, set m(v) { M = v } }, rogue: () => (rogue ? { x: rogue.x, y: rogue.y } : null),
   }
 })()
 
