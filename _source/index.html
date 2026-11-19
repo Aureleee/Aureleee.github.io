@@ -116,10 +116,10 @@
       <div class="dm-eqs">
         <div class="dm-eq" data-tex="z_0 = \mathcal{E}(x)"><span class="mono">01 encode</span><div class="tex"></div></div>
         <div class="dm-eq" data-tex="z_t = \sqrt{\bar\alpha_t}\, z_0 + \sqrt{1-\bar\alpha_t}\,\varepsilon"><span class="mono">02 forward</span><div class="tex"></div></div>
-        <div class="dm-eq" data-tex="z_{t-1} = \sqrt{\bar\alpha_{t-1}}\,\hat z_0 + \sqrt{1-\bar\alpha_{t-1}}\,\hat\varepsilon_\theta(z_t, t)"><span class="mono">03 reverse · DDIM</span><div class="tex"></div></div>
+        <div class="dm-eq" data-tex="z_t = \sqrt{\bar\alpha_t}\,\hat z_0(z_t, t) + \sqrt{1-\bar\alpha_t}\,\hat\varepsilon_\theta(z_t, t)"><span class="mono">03 reverse · DDIM path</span><div class="tex"></div></div>
         <div class="dm-eq" data-tex="\hat x = \mathcal{D}(\hat z_0)"><span class="mono">04 decode</span><div class="tex"></div></div>
       </div>
-      <p class="dm-note mono">Forward and DDIM updates are the real ones. The denoiser is simulated: it returns a blurred z₀, sharper as noise drops.</p>
+      <p class="dm-note mono">Forward process and DDIM path are the real formulas. The denoiser is simulated: its guess ẑ₀ is a blurred z₀ that sharpens as t → 0.</p>
     </div>
   </section>
 

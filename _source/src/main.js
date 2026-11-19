@@ -44,7 +44,7 @@ if (!isTouch) {
 const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
-  let W, H, dpr, P = [], t = 1, scrollT = 0
+  let W, H, dpr, P = [], F = [], WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
   const mouse = { x: -1e4, y: -1e4 }
 
   function build() {
@@ -76,6 +76,14 @@ const hero = (() => {
       ox: 0, oy: 0, vx: 0, vy: 0,            // mouse offset spring
       ph: Math.random() * 0.8,
       acc: Math.random() < 0.025,
+      loose: Math.random() < 0.05, lp: Math.random() * 20,
+    }))
+    // free particles wandering around the name
+    const band = (lines.length * lh) * 1.4 + H * 0.12
+    WB = { y0: y0 - band / 2 - lh * 0.2, h: band + lh * (lines.length - 1) * 0.4 }
+    F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
+      x: Math.random() * W, y: WB.y0 + Math.random() * WB.h, s: 1 + Math.random() * 1.6,
+      a: 0.18 + Math.random() * 0.45, acc: Math.random() < 0.12, ph: Math.random() * 10,
     }))
   }
 
@@ -86,12 +94,23 @@ const hero = (() => {
     ctx.clearRect(0, 0, W, H)
     const cx = W / 2, cy = H * 0.45
     const r = step() * 0.72
-    const time = performance.now() / 1000
+    const now = performance.now(), time = now / 1000, dt = Math.min(0.05, (now - lastT) / 1000); lastT = now
+    // wanderers: advected by a slow flow field, wrapped around the band
+    for (const q of F) {
+      q.x += (26 * Math.sin(q.y * 0.012 + time * 0.45 + q.ph) + 12 * Math.cos(time * 0.3 + q.ph)) * dt
+      q.y += (14 * Math.cos(q.x * 0.009 + time * 0.5 + q.ph * 0.5)) * dt
+      if (q.x < -10) q.x = W + 10; if (q.x > W + 10) q.x = -10
+      if (q.y < WB.y0) q.y = WB.y0 + WB.h; if (q.y > WB.y0 + WB.h) q.y = WB.y0
+      const edge = Math.min(q.y - WB.y0, WB.y0 + WB.h - q.y) / (WB.h * 0.2)
+      ctx.fillStyle = q.acc ? `rgba(200,255,0,${q.a * Math.min(1, edge)})` : `rgba(241,239,233,${q.a * Math.min(1, edge)})`
+      ctx.fillRect(q.x, q.y, q.s, q.s)
+    }
     for (const p of P) {
       // mouse repulsion with spring back
       // slow fluid drift: a smooth flow field, same for neighbours
-      const fx = 2.6 * Math.sin(p.ty * 0.012 + p.tx * 0.003 + time * 0.7) + 0.35 * Math.sin(time * 1.3 + p.ph * 4)
-      const fy = 2.6 * Math.cos(p.tx * 0.008 - p.ty * 0.004 + time * 0.55) + 0.35 * Math.cos(time * 1.1 + p.ph * 5)
+      let fx = 5.5 * Math.sin(p.ty * 0.009 + p.tx * 0.0045 + time * 1.1) + 0.5 * Math.sin(time * 1.7 + p.ph * 4)
+      let fy = 4.5 * Math.cos(p.tx * 0.006 - p.ty * 0.003 + time * 0.85) + 0.5 * Math.cos(time * 1.4 + p.ph * 5)
+      if (p.loose) { fx += 16 * Math.sin(time * 0.8 + p.lp) + 8 * Math.sin(time * 1.9 + p.lp * 2); fy += 11 * Math.cos(time * 0.65 + p.lp * 1.3) }
       const x0 = cx + a * (p.tx - cx) + b * p.ex + fx, y0 = cy + a * (p.ty - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
