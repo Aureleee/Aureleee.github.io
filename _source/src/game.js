@@ -53,6 +53,8 @@ const PERKS = [
   { id: 'frost',   name: 'Frost',      desc: 'noise near the core is slowed' },
   { id: 'regen',   name: 'Regen',      desc: 'the signal slowly comes back' },
   { id: 'overclock', name: 'Overclock', desc: '+30% fire rate' },
+  { id: 'autolaser', name: 'Auto laser', desc: 'a laser fires on its own every 2 s and bounces twice' },
+  { id: 'twin',    name: 'Twin cannon', desc: 'a second cannon fires backwards' },
 ]
 
 export function initGame({ lenis }) {
@@ -153,6 +155,13 @@ export function initGame({ lenis }) {
     materialise('zig', hpLeft - TYPES.zig.hp, x, y)       // the escaping pixel is the first enemy, with its 3 lives
     say('DENOISE', 'aim with the mouse · it fires on its own · B for the shop', 2.8)
   }
+  // a fresh run: everything back to zero, level 1
+  function restart() {
+    Object.assign(S, { coins: 0, perks: new Set(), signal: 100, score: 0, combo: 0, enemies: [], pend: [], bolts: [], foes: [], fx: [], texts: [], focus: 2, reload: 0, shells: [], beams: [], autoT: 0 })
+    S.stats = { dl: 1, dmg: 1, rl: 1, vl: 1, multi: 1, bounce: 0, pierce: 0, laser: 0, turrets: 1, focusMax: 2 }
+    S.drones = [newDrone()]
+    updHud(); startLevel(1)
+  }
   function quit(win = false) {
     Object.assign(S, { active: false, phase: 'off', enemies: [], pend: [], bolts: [], foes: [] })
     window.__ts = 1
@@ -216,8 +225,8 @@ export function initGame({ lenis }) {
   }
   function lose() {
     S.phase = 'lost'
-    panel.innerHTML = `<p class="gm-t">signal lost <span>level ${S.level} · score ${S.score}</span></p><div class="gm-row"><button class="gm-next" data-a="retry" type="button">retry level</button><button class="gm-next gm-ghost" data-a="quit" type="button">quit</button></div>`
-    panel.querySelector('[data-a=retry]').addEventListener('click', () => { Object.assign(S, { enemies: [], foes: [], pend: [], signal: 100 }); S.drones.forEach(d => d.hp = d.max); startLevel(S.level) })
+    panel.innerHTML = `<p class="gm-t">signal lost <span>level ${S.level} · score ${S.score}</span></p><div class="gm-row"><button class="gm-next" data-a="retry" type="button">restart from level 1</button><button class="gm-next gm-ghost" data-a="quit" type="button">quit</button></div>`
+    panel.querySelector('[data-a=retry]').addEventListener('click', () => restart())
     panel.querySelector('[data-a=quit]').addEventListener('click', () => quit())
     panel.classList.add('on')
   }
@@ -249,6 +258,10 @@ export function initGame({ lenis }) {
       const v = SPEED[S.stats.vl]
       S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
+    if (S.perks.has('twin')) {
+      const a = base + Math.PI, v = SPEED[S.stats.vl]
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
+    }
     S.recoil = 1
     S.reload = RATE[S.stats.rl] / (S.perks.has('overclock') ? 1.3 : 1)
   }
@@ -263,6 +276,15 @@ export function initGame({ lenis }) {
       if (axis === 0) ux = -ux; else uy = -uy
     }
     return pts
+  }
+  function autoLaser() {
+    const C = core(); let best = null, bd = 1e9
+    for (const e of S.enemies) { const d = Math.hypot(e.x - C.x, e.y - C.y); if (d < bd) { bd = d; best = e } }
+    if (!best) return
+    const a = Math.atan2(best.y - C.y, best.x - C.x), pts = trace(C.x, C.y, Math.cos(a), Math.sin(a), 2)
+    const L = { pts, dmg: 2.5 + 0.6 * S.level, pierce: 3, hits: new Set(), age: 0, w: 2.5 }
+    for (let i = 1; i < pts.length; i++) { if (hitBeam(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], L.w, L) !== null) { pts.length = i + 1; break } }
+    S.beams.push(L)
   }
   function fireLaser() {
     const c = charge(); if (c < 0.15 || S.phase !== 'play') return
@@ -332,6 +354,7 @@ export function initGame({ lenis }) {
       const dt = rdt * S.ts, t = now / 1000, C = core()
       S.reload = Math.max(0, S.reload - dt); S.recoil = Math.max(0, (S.recoil || 0) - rdt * 8)
       if (playing && S.reload <= 0 && M.x > -1e3) fireCannon()          // auto-fire toward the mouse
+      if (playing && S.perks.has('autolaser')) { S.autoT = (S.autoT || 0) + dt; if (S.autoT > 2) { S.autoT = 0; autoLaser() } }
       if (S.perks.has('regen') && playing) { S.signal = Math.min(100, S.signal + 0.8 * dt); $('.gm-sig i').style.width = S.signal + '%' }
       S.comboT -= dt; if (S.comboT <= 0 && S.combo) { S.combo = 0; updHud() }
       if (S.ts < 0.9 && playing) {
