@@ -6,7 +6,7 @@
   and rebuild the site.
 */
 const C = 280                                    // the banner multiplier that counts as the speed of light
-const DC = 520                                   // pixels to swallow before the hole collapses
+const DC = 480                                   // clicked pixels to swallow before the hole collapses (~7 clicks)
 const clamp01 = v => Math.max(0, Math.min(1, v))
 const smooth = (a, b, v) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t) }
 
@@ -29,6 +29,8 @@ export function initWarp(lenis) {
   mq.addEventListener('pointerup', up); mq.addEventListener('pointercancel', up); mq.addEventListener('lostpointercapture', up)
 
   let blurOn = false, warnOn = false
+  const css = {}                                              // write a style only when it changes
+  const setS = (el, k, v) => { const id = (el === mq ? 'm' : 't') + k; if (css[id] !== v) { css[id] = v; el.style[k] = v } }
   const loop = now => {
     const dt = Math.min(0.05, (now - last) / 1000); last = now
     if (held) mult *= Math.exp(-2.2 * dt)
@@ -40,16 +42,16 @@ export function initWarp(lenis) {
       const beta = Math.min(0.999, mult / C), gamma = Math.sqrt(1 - beta * beta)
       const lorentz = 1 - smooth(0.35, 1, beta) * (1 - Math.max(0.3, gamma))   // length contraction near c
       const thin = 1 - 0.75 * smooth(0.12, 0.8, beta)                             // the text flattens into a streak
-      track.style.transform = `translate3d(${x - half}px,0,0) scale(${lorentz.toFixed(4)},${thin.toFixed(4)})`
-      track.style.transformOrigin = `${half - x + mq.clientWidth / 2}px 50%`
+      setS(track, 'transform', `translate3d(${(x - half).toFixed(1)}px,0,0) scale(${lorentz.toFixed(3)},${thin.toFixed(3)})`)
+      setS(track, 'transformOrigin', `${(half - x + mq.clientWidth / 2).toFixed(0)}px 50%`)
       // ghosts of the previous frames
       const g = smooth(P * 0.06, P * 0.4, dpf) * (1 - smooth(0.1, 0.4, beta)), n = Math.round(g * 4)
-      track.style.textShadow = n > 0 ? Array.from({ length: n }, (_, k) => `${((k + 1) * (10 + 30 * g)).toFixed(1)}px 0 rgba(11,11,11,${(0.3 / (k + 1)).toFixed(3)})`).join(',') : ''
+      setS(track, 'textShadow', n > 0 ? Array.from({ length: n }, (_, k) => `${((k + 1) * (10 + 30 * g)).toFixed(1)}px 0 rgba(11,11,11,${(0.3 / (k + 1)).toFixed(3)})`).join(',') : '')
       // motion blur grows without bound: well before c the words are one dark line
       const sd = Math.min(90, dpf * 0.09 + 140 * smooth(0.05, 0.6, beta))
-      if (sd > 0.25) { blurG.setAttribute('stdDeviation', `${sd.toFixed(2)} 0`); if (!blurOn) { track.style.filter = 'url(#mqblur)'; blurOn = true } }
+      if (sd > 0.25) { const sv = `${sd.toFixed(1)} 0`; if (css.sd !== sv) { css.sd = sv; blurG.setAttribute('stdDeviation', sv) } if (!blurOn) { track.style.filter = 'url(#mqblur)'; blurOn = true } }
       else if (blurOn) { track.style.filter = ''; blurOn = false }
-      mq.style.boxShadow = beta > 0.4 ? `0 0 ${(70 * smooth(0.4, 1, beta)).toFixed(0)}px rgba(200,255,0,${(0.4 * smooth(0.4, 1, beta)).toFixed(3)})` : ''
+      setS(mq, 'boxShadow', beta > 0.4 ? `0 0 ${(70 * smooth(0.4, 1, beta)).toFixed(0)}px rgba(200,255,0,${(0.4 * smooth(0.4, 1, beta)).toFixed(3)})` : '')
       const w = beta > 0.45
       if (warn && w !== warnOn) { warnOn = w; warn.classList.toggle('on', w) }
     }
@@ -64,13 +66,23 @@ export function initWarp(lenis) {
     const g = c.getContext('2d', { willReadFrequently: true })
     g.fillStyle = getComputedStyle(document.body).backgroundColor || '#0b0b0b'; g.fillRect(0, 0, W, H)
     const inView = r => r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < H && r.right > 0 && r.left < W
-    const opac = el => { let o = 1; for (let e = el; e && e !== document.documentElement; e = e.parentElement) o *= +getComputedStyle(e).opacity; return o }
-    const angle = el => { let a = 0; for (let e = el; e && e !== document.documentElement; e = e.parentElement) { const t = getComputedStyle(e).transform; if (t && t !== 'none') { const m = new DOMMatrix(t); a += Math.atan2(m.b, m.a) } } return a }
+    const SC = new Map(), OP = new Map(), AN = new Map()
+    const st = el => { let c = SC.get(el); if (!c) { c = getComputedStyle(el); SC.set(el, c) } return c }
+    const opac = el => {
+      if (!el || el === document.documentElement) return 1
+      let o = OP.get(el); if (o === undefined) { o = +st(el).opacity * opac(el.parentElement); OP.set(el, o) } return o
+    }
+    const angle = el => {
+      if (!el || el === document.documentElement) return 0
+      let a = AN.get(el)
+      if (a === undefined) { const t = st(el).transform; a = angle(el.parentElement); if (t && t !== 'none') { const m = new DOMMatrix(t); a += Math.atan2(m.b, m.a) } AN.set(el, a) }
+      return a
+    }
     const skip = el => el.closest('.flow-layer, .game-layer, .cursor, .loader, .bh-layer, svg, script, style, .sr-only')
     document.querySelectorAll('.game-layer').forEach(cv => { try { g.drawImage(cv, 0, 0, W, H) } catch {} })
     for (const el of document.body.querySelectorAll('*')) {
       if (skip(el)) continue
-      const cs = getComputedStyle(el)
+      const cs = st(el)
       if (cs.visibility === 'hidden' || cs.display === 'none') continue
       const r = el.getBoundingClientRect(); if (!inView(r)) continue
       const o = opac(el); if (o < 0.02) continue
@@ -92,7 +104,7 @@ export function initWarp(lenis) {
     const range = document.createRange()
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
       const el = n.parentElement; if (!el || skip(el) || !n.textContent.trim()) continue
-      const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || cs.display === 'none') continue
+      const cs = st(el); if (cs.visibility === 'hidden' || cs.display === 'none') continue
       const er = el.getBoundingClientRect(); if (!inView(er)) continue
       const o = opac(el); if (o < 0.02) continue
       const a = angle(el), upc = cs.textTransform === 'uppercase', txt = n.textContent
@@ -115,7 +127,6 @@ export function initWarp(lenis) {
     if (busy) return
     busy = true; held = false; mult = 1
     const W = innerWidth, H = innerHeight, hx = W / 2, hy = H / 2, maxD = Math.hypot(W, H) / 2
-    lenis?.stop(); document.documentElement.style.overflow = 'hidden'
 
     // 1. the page, as pixels
     const sd = rasterise(W, H).getContext('2d').getImageData(0, 0, W, H).data
@@ -134,6 +145,17 @@ export function initWarp(lenis) {
     // a few leftover pixels stay behind: the hole catches them afterwards
     const ORBN = Math.min(1400, Math.round(px.length * 0.03))
     for (let i = 0; i < ORBN; i++) { const p = px[(Math.random() * px.length) | 0]; if (p && p.d > maxD * 0.25) p.keep = true }
+    const y0 = scrollY
+    // the page may have scrolled meanwhile: rebuild what is on screen now
+    function retarget() {
+      const d2 = rasterise(W, H).getContext('2d').getImageData(0, 0, W, H).data
+      px.length = 0
+      for (let y = 0; y < H - 2; y += STEP) for (let x = 0; x < W - 2; x += STEP) {
+        const k = 4 * ((y + 1) * W + x + 1), r = d2[k], gg = d2[k + 1], b = d2[k + 2]
+        if (Math.abs(r - bgR) + Math.abs(gg - bgG) + Math.abs(b - bgB) < 14) continue
+        px.push({ hx: x, hy: y, col: (0xff000000 | (b << 16) | (gg << 8) | r) >>> 0, d: Math.hypot(x - hx, y - hy) })
+      }
+    }
     let tAppear = 2
     for (const p of px) if (!p.keep) tAppear = Math.max(tAppear, p.ts + p.T)
     tAppear += 0.05
@@ -155,13 +177,13 @@ export function initWarp(lenis) {
 
     const R0 = Math.min(W, H) * 0.07, TILT = 0.26
     const ACCs = 'rgba(200,255,0,', FGs = 'rgba(241,239,233,'
-    let phase = 'eat', tPhase = 0, density = 0, shake = 0, rb = null
+    let phase = 'eat', tPhase = 0, density = 0, shake = 0, rb = null, spinKick = 0, lastY = scrollY
     const orb = [], sparks = []
     const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4 }
     const SPC = [0xff00ffc8, 0xffe9eff1]               // lime, off-white (ABGR)
-    const spark = (x, y) => {
+    const spark = (x, y, mass = false) => {
       const dx = x - hx, dy = (y - hy) / TILT
-      sparks.push({ r: Math.hypot(dx, dy), a: Math.atan2(dy, dx), vr: -R0 * 2, col: SPC[(Math.random() < 0.55) | 0] })
+      sparks.push({ r: Math.hypot(dx, dy), a: Math.atan2(dy, dx), vr: -R0 * 2, col: SPC[(Math.random() < 0.55) | 0], mass })
     }
     cv.addEventListener('pointermove', e => {
       mouse.x = e.clientX; mouse.y = e.clientY
@@ -171,13 +193,13 @@ export function initWarp(lenis) {
     })
     cv.addEventListener('pointerdown', e => {
       e.stopPropagation()
-      if (phase === 'idle') for (let k = 0; k < 45; k++) spark(e.clientX + (Math.random() - 0.5) * 30, e.clientY + (Math.random() - 0.5) * 30)
+      if (phase === 'idle') for (let k = 0; k < 70; k++) spark(e.clientX + (Math.random() - 0.5) * 34, e.clientY + (Math.random() - 0.5) * 34, true)
     })
 
     const proj = (r, a) => [hx + Math.cos(a) * r, hy + Math.sin(a) * r * TILT]
     const Rnow = () => R0 * (1 + 0.35 * Math.min(1, density / DC))     // it grows as it feeds
     const orbit = (o, dt, R, pull) => {
-      o.a += 2.8 * (R / Math.max(o.r, R * 0.6)) ** 1.5 * dt * (1 + pull)
+      o.a += 2.8 * (R / Math.max(o.r, R * 0.6)) ** 1.5 * dt * (1 + pull + spinKick)
       o.vr *= Math.exp(-3 * dt); o.r += (o.vr - R * 0.03 * (1 + 6 * pull)) * dt
       const [x, y] = proj(o.r, o.a), d = Math.hypot(x - mouse.x, y - mouse.y)
       if (d < 60) o.vr += (60 - d) * 2.4 * dt                          // the cursor stirs the disk
@@ -198,6 +220,8 @@ export function initWarp(lenis) {
     const start = performance.now(); let lastNow = start
     const frame = now => {
       const t = (now - start) / 1000, dt = Math.min(0.05, (now - lastNow) / 1000); lastNow = now
+      // the page keeps scrolling underneath; scrolling stirs the disk
+      spinKick = spinKick * Math.exp(-3 * dt) + Math.min(6, Math.abs(scrollY - lastY) / 40); lastY = scrollY
       const darkA = phase === 'rebuild' ? 1 - smooth(0.2, 1.4, t - tPhase) : smooth(0.2, tAppear, t)
       const bgv = Math.round(11 - 7 * darkA), BG = (0xff000000 | (bgv << 16) | (bgv << 8) | bgv) >>> 0
       u32.fill(BG)
@@ -243,10 +267,10 @@ export function initWarp(lenis) {
           o.r += (o.rt - o.r) * (1 - Math.exp(-2.2 * dt)) * (1 - o.c * 0.6)
           orbit(o, dt, R, 0)
         }
-        for (let k = orb.length - 1; k >= 0; k--) if (orb[k].r < R) { orb.splice(k, 1); density++ }
+        for (let k = orb.length - 1; k >= 0; k--) if (orb[k].r < R) orb.splice(k, 1)
         for (let k = sparks.length - 1; k >= 0; k--) {
           const o = sparks[k]; orbit(o, dt, R, 3.5); o.vr -= R * 6 * dt
-          if (o.r < R * 1.02) { sparks.splice(k, 1); density++ }
+          if (o.r < R * 1.02) { sparks.splice(k, 1); if (o.mass) density++ }
         }
         const front = []
         for (const o of orb) {
@@ -281,6 +305,7 @@ export function initWarp(lenis) {
         if (u >= 1.55) {
           phase = 'rebuild'; tPhase = t
           document.documentElement.classList.remove('bh-on')       // the real page is back underneath, still covered
+          if (Math.abs(scrollY - y0) > 2) retarget()
           rb = px.map(p => ({ d: Math.random() * 0.25 + (p.d / maxD) * 0.3, T: 0.9 + Math.random() * 0.7, bend: (Math.random() - 0.5) * 0.9 }))
         }
       } else if (phase === 'rebuild') {
@@ -309,7 +334,6 @@ export function initWarp(lenis) {
     function finish() {
       cv.remove()
       document.documentElement.classList.remove('bh-on')
-      document.documentElement.style.overflow = ''; lenis?.start()
       mult = 1; busy = false
     }
     window.__bhFeed = n => { density += n }
