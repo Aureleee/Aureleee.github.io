@@ -22,8 +22,15 @@ export function initWarp(lenis) {
     if (b >= 0.3) return b.toFixed(2).replace(/^0/, '') + 'c'
     return m < 10 ? '×' + m.toFixed(1).replace(/\.0$/, '') : '×' + Math.round(m)
   }
-  btn.addEventListener('pointerdown', ev => ev.stopPropagation())
-  btn.addEventListener('click', () => { if (busy) return; mult *= 1.6; if (mult >= C) blackHole() })
+  // a tap multiplies the speed, holding the button keeps accelerating, faster and faster
+  let pressT = 0, pressing = false
+  btn.addEventListener('pointerdown', ev => { ev.stopPropagation(); if (busy) return; pressing = true; pressT = performance.now(); btn.setPointerCapture?.(ev.pointerId) })
+  const letGo = () => { pressing = false }
+  btn.addEventListener('pointerup', letGo); btn.addEventListener('pointercancel', letGo); btn.addEventListener('lostpointercapture', letGo)
+  btn.addEventListener('click', () => {
+    if (busy || performance.now() - pressT > 280) return
+    mult *= 1.6; if (mult >= C) blackHole()
+  })
   mq.addEventListener('pointerdown', ev => { held = true; mq.classList.add('braking'); mq.setPointerCapture?.(ev.pointerId) })
   const up = () => { held = false; mq.classList.remove('braking') }
   mq.addEventListener('pointerup', up); mq.addEventListener('pointercancel', up); mq.addEventListener('lostpointercapture', up)
@@ -33,6 +40,10 @@ export function initWarp(lenis) {
   const setS = (el, k, v) => { const id = (el === mq ? 'm' : 't') + k; if (css[id] !== v) { css[id] = v; el.style[k] = v } }
   const loop = now => {
     const dt = Math.min(0.05, (now - last) / 1000); last = now
+    if (pressing && !busy) {
+      const h = (now - pressT) / 1000
+      if (h > 0.28) { mult *= Math.exp((0.6 + 1.4 * (h - 0.28)) * dt); if (mult >= C) { pressing = false; blackHole() } }
+    }
     if (held) mult *= Math.exp(-2.2 * dt)
     else if (mult < 1) mult += (1 - mult) * (1 - Math.exp(-1.5 * dt))
     const half = track.scrollWidth / 4, items = Math.max(1, track.children.length / 8)   // 4 copies
