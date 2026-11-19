@@ -47,13 +47,17 @@ const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
   let W, H, dpr, P = [], F = [], M = 0, exits = [], rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
-  const mouse = { x: -1e4, y: -1e4 }
+  const mouse = { x: -1e4, y: -1e4 }, gm = { x: -1e4, y: -1e4 }
+  const gcv = document.createElement('canvas'); gcv.className = 'game-layer'; document.body.appendChild(gcv)
+  const gctx = gcv.getContext('2d')
+  addEventListener('mousemove', e => { gm.x = e.clientX; gm.y = e.clientY })
 
   function build() {
     dpr = Math.min(devicePixelRatio || 1, 2)
     W = cv.clientWidth; H = cv.clientHeight
     cv.width = W * dpr; cv.height = H * dpr
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    gcv.width = W * dpr; gcv.height = H * dpr; gctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     // draw name offscreen and sample pixels
     const off = document.createElement('canvas'); off.width = W; off.height = H
     const o = off.getContext('2d')
@@ -148,6 +152,9 @@ const hero = (() => {
       ctx.fillStyle = p.acc ? ACC : `rgba(241,239,233,${0.5 + 0.5 * ab})`
       ctx.fillRect(x0 + p.ox, y0 + p.oy, r, r)
     }
+    // ---- the chase lives on its own fixed layer, in viewport coordinates, so it follows the visitor down the page
+    const heroTop = cv.getBoundingClientRect().top
+    gctx.clearRect(0, 0, W, H)
     // drones leaving after the catch: spin up, then warp out with a streak and pop
     exits = exits.filter(e => {
       e.t += dt
@@ -156,7 +163,7 @@ const hero = (() => {
         const dir = e.ang + e.spin, a2 = 2600
         e.vx += Math.cos(dir) * a2 * dt; e.vy += Math.sin(dir) * a2 * dt; e.x += e.vx * dt; e.y += e.vy * dt
         const sp = Math.hypot(e.vx, e.vy)
-        ctx.strokeStyle = 'rgba(241,239,233,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x - e.vx / sp * Math.min(160, sp * 0.12), e.y - e.vy / sp * Math.min(160, sp * 0.12)); ctx.stroke()
+        gctx.strokeStyle = 'rgba(241,239,233,.55)'; gctx.lineWidth = 1.5; gctx.beginPath(); gctx.moveTo(e.x, e.y); gctx.lineTo(e.x - e.vx / sp * Math.min(160, sp * 0.12), e.y - e.vy / sp * Math.min(160, sp * 0.12)); gctx.stroke()
         if (e.t > 0.85 || e.x < -40 || e.x > W + 40 || e.y < -40 || e.y > H + 40) {
           e.done = true
           for (let k = 0; k < 16; k++) { const a3 = Math.random() * 7, v3 = 80 + Math.random() * 220; bursts.push({ x: Math.max(4, Math.min(W - 4, e.x)), y: Math.max(4, Math.min(H - 4, e.y)), vx: Math.cos(a3) * v3, vy: Math.sin(a3) * v3, life: 0.6 }) }
@@ -164,26 +171,26 @@ const hero = (() => {
       }
       if (!e.done) {
         const st2 = e.t < 0.5 ? 1 : 1 + (e.t - 0.5) * 3
-        ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang + e.spin); ctx.scale(st2, 1 / st2)
-        ctx.strokeStyle = 'rgba(241,239,233,.9)'; ctx.lineWidth = 1.3
-        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-3, 0); ctx.lineTo(-6, 5); ctx.closePath(); ctx.stroke(); ctx.restore()
+        gctx.save(); gctx.translate(e.x, e.y); gctx.rotate(e.ang + e.spin); gctx.scale(st2, 1 / st2)
+        gctx.strokeStyle = 'rgba(241,239,233,.9)'; gctx.lineWidth = 1.3
+        gctx.beginPath(); gctx.moveTo(8, 0); gctx.lineTo(-6, -5); gctx.lineTo(-3, 0); gctx.lineTo(-6, 5); gctx.closePath(); gctx.stroke(); gctx.restore()
       }
       return e.t < 1.6
     })
-    if (caught) bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; ctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; ctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
+    if (caught) bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; gctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; gctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
     // the escaping pixel
-    if (rogue && !caught && tt < 0.3) {
-      const q = rogue, [hx, hy] = q.home
+    if (rogue && !caught) {
+      const q = rogue, hx = q.home[0], hy = Math.max(H * 0.25, Math.min(H * 0.7, q.home[1] + heroTop))
       const wx = hx + Math.sin(time * 0.37 + q.ph) * q.span[0] + Math.sin(time * 1.3) * 30, wy = hy + Math.cos(time * 0.53 + q.ph) * q.span[1]
       q.vx += (wx - q.x) * 0.9 * dt; q.vy += (wy - q.y) * 0.9 * dt
-      const dx = q.x - mouse.x, dy = q.y - mouse.y, d = Math.hypot(dx, dy)
+      const dx = q.x - gm.x, dy = q.y - gm.y, d = Math.hypot(dx, dy)
       if (d < 160) { const f = (160 - d) / 160 * 2600 * dt; q.vx += dx / (d + 1e-3) * f; q.vy += dy / (d + 1e-3) * f }
       q.vx *= Math.pow(0.12, dt); q.vy *= Math.pow(0.12, dt)
-      q.x = Math.max(20, Math.min(W - 20, q.x + q.vx * dt)); q.y = Math.max(H * 0.12, Math.min(H * 0.8, q.y + q.vy * dt))
+      q.x = Math.max(20, Math.min(W - 20, q.x + q.vx * dt)); q.y = Math.max(H * 0.08, Math.min(H * 0.92, q.y + q.vy * dt))
       q.trail.push([q.x, q.y]); if (q.trail.length > 14) q.trail.shift()
-      q.trail.forEach(([x, y], i) => { ctx.fillStyle = `rgba(200,255,0,${(i / q.trail.length) * 0.35})`; ctx.fillRect(x - 1.5, y - 1.5, 3, 3) })
+      q.trail.forEach(([x, y], i) => { gctx.fillStyle = `rgba(200,255,0,${(i / q.trail.length) * 0.35})`; gctx.fillRect(x - 1.5, y - 1.5, 3, 3) })
       const pulse = 1 + 0.35 * Math.sin(time * 6)
-      ctx.strokeStyle = 'rgba(200,255,0,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(q.x, q.y, 9 * pulse, 0, 7); ctx.stroke()
+      gctx.strokeStyle = 'rgba(200,255,0,.35)'; gctx.lineWidth = 1; gctx.beginPath(); gctx.arc(q.x, q.y, 9 * pulse, 0, 7); gctx.stroke()
       // two micro hunters chase the pixel and shoot at it, the pixel dodges
       for (const s of shots) {
         const rx = q.x - s.x, ry = q.y - s.y, dd = Math.hypot(rx, ry)
@@ -203,59 +210,71 @@ const hero = (() => {
           h.cool = 1.3 + Math.random() * 1.2
         }
         const ang = Math.atan2(uy, ux)
-        ctx.save(); ctx.translate(h.x, h.y); ctx.rotate(ang)
-        ctx.strokeStyle = 'rgba(241,239,233,.9)'; ctx.lineWidth = 1.3
-        ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-3, 0); ctx.lineTo(-6, 5); ctx.closePath(); ctx.stroke()
-        ctx.fillStyle = `rgba(255,120,60,${0.5 + 0.5 * Math.sin(time * 30 + h.side)})`; ctx.fillRect(-8, -1, 2.5, 2)
-        ctx.restore()
+        gctx.save(); gctx.translate(h.x, h.y); gctx.rotate(ang)
+        gctx.strokeStyle = 'rgba(241,239,233,.9)'; gctx.lineWidth = 1.3
+        gctx.beginPath(); gctx.moveTo(8, 0); gctx.lineTo(-6, -5); gctx.lineTo(-3, 0); gctx.lineTo(-6, 5); gctx.closePath(); gctx.stroke()
+        gctx.fillStyle = `rgba(255,120,60,${0.5 + 0.5 * Math.sin(time * 30 + h.side)})`; gctx.fillRect(-8, -1, 2.5, 2)
+        gctx.restore()
       }
       shots = shots.filter(s => {
         s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.age += dt
         // blasts shove the particles of the name they fly through
-        for (const p of P) {
-          const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - (p.ty + p.oy)
+        if (heroTop > -H) for (const p of P) {
+          const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - heroTop - (p.ty + p.oy)
           if (dxp * dxp + dyp * dyp < 220) { p.vx -= dxp * 0.08 + s.vx * 0.004; p.vy -= dyp * 0.08 + s.vy * 0.004 }
         }
         if (s.age < 1.4 && Math.hypot(s.x - q.x, s.y - q.y) < 6) {
           q.hit = 0.35; q.vx += s.vx * 0.9; q.vy += s.vy * 0.9
           for (let k = 0; k < 14; k++) { const a2 = Math.random() * 7, v2 = 60 + Math.random() * 160; bursts.push({ x: q.x, y: q.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.5 }) }
-          setTimeout(() => triggerX(), 250)
+          setTimeout(() => catchIt(), 250)
           return false
         }
         const n = Math.hypot(s.vx, s.vy)
-        ctx.strokeStyle = 'rgba(255,140,90,.95)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - s.vx / n * 9, s.y - s.vy / n * 9); ctx.stroke()
+        gctx.strokeStyle = 'rgba(255,140,90,.95)'; gctx.lineWidth = 2; gctx.beginPath(); gctx.moveTo(s.x, s.y); gctx.lineTo(s.x - s.vx / n * 9, s.y - s.vy / n * 9); gctx.stroke()
         return s.life > 0 && s.x > -20 && s.x < W + 20 && s.y > -20 && s.y < H + 20
       })
-      bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; ctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; ctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
+      bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; gctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; gctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
       q.hit = Math.max(0, q.hit - dt)
-      ctx.fillStyle = q.hit > 0 && Math.floor(time * 30) % 2 ? '#ffffff' : ACC; ctx.fillRect(q.x - 3, q.y - 3, 6, 6)
+      gctx.fillStyle = q.hit > 0 && Math.floor(time * 30) % 2 ? '#ffffff' : ACC; gctx.fillRect(q.x - 3, q.y - 3, 6, 6)
       // tiny hint: shown for a few seconds, then only when the cursor gets close
       q.h0 = q.h0 ?? time
-      const near = Math.hypot(q.x - mouse.x, q.y - mouse.y)
+      const near = Math.hypot(q.x - gm.x, q.y - gm.y)
       const ha = (near < 220 ? 1 - near / 220 : 0) * 0.75
-      if (ha > 0.02) { ctx.font = '11px JetBrains Mono'; ctx.fillStyle = `rgba(200,255,0,${ha})`; ctx.fillText('catch me', q.x + 12, q.y - 10) }
-      cv.style.cursor = Math.hypot(q.x - mouse.x, q.y - mouse.y) < 26 ? 'pointer' : ''
+      if (ha > 0.02) { gctx.font = '11px JetBrains Mono'; gctx.fillStyle = `rgba(200,255,0,${ha})`; gctx.fillText('catch me', q.x + 12, q.y - 10) }
+      document.documentElement.style.cursor = Math.hypot(q.x - gm.x, q.y - gm.y) < 26 ? 'pointer' : ''
     }
   }
   const step = () => Math.max(2, Math.round(W / 520))
 
   cv.addEventListener('mousemove', e => { const rc = cv.getBoundingClientRect(); mouse.x = e.clientX - rc.left; mouse.y = e.clientY - rc.top })
   cv.addEventListener('mouseleave', () => { mouse.x = mouse.y = -1e4 })
-  cv.addEventListener('pointerdown', e => {
+  addEventListener('pointerdown', e => {
     if (!rogue || caught) return
-    const rc = cv.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top
-    if (Math.hypot(x - rogue.x, y - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return
-    triggerX()
+    if (Math.hypot(e.clientX - rogue.x, e.clientY - rogue.y) > (e.pointerType === 'touch' ? 40 : 26)) return
+    catchIt()
   })
+  // near the name: the X easter egg; further down the page: the pixel pops and comes back
+  function catchIt() {
+    if (caught) return
+    if (cv.getBoundingClientRect().top > -H * 0.5) return triggerX()
+    caught = true; shots = []; document.documentElement.style.cursor = ''
+    exits = hunters.map(h => ({ x: h.x, y: h.y, ang: Math.atan2(h.vy, h.vx) || 0, spin: 0, t: 0, vx: 0, vy: 0, done: false })); hunters = []
+    for (let k = 0; k < 40; k++) { const a2 = Math.random() * 7, v2 = 80 + Math.random() * 260; bursts.push({ x: rogue.x, y: rogue.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.8 }) }
+    setTimeout(respawn, 2600)
+  }
+  function respawn() {
+    caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9); rogue.y = H * 0.5; rogue.vx = rogue.vy = 0
+    hunters = [{ x: -30, y: rogue.y - 80, vx: 0, vy: 0, cool: 3, side: 1 }, { x: W + 30, y: rogue.y + 80, vx: 0, vy: 0, cool: 4, side: -1 }]
+  }
   function triggerX() {
     if (caught) return
-    caught = true; cv.style.cursor = ''; shots = []
+    caught = true; document.documentElement.style.cursor = ''; shots = []
     exits = hunters.map(h => ({ x: h.x, y: h.y, ang: Math.atan2(h.vy, h.vx) || 0, spin: 0, t: 0, vx: 0, vy: 0, done: false })); hunters = []
     tstep.textContent = 'caught'
     gsap.timeline()
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
       .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
-      .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9); hunters = [{ x: -30, y: rogue.home[1] - 80, vx: 0, vy: 0, cool: 3, side: 1 }, { x: W + 30, y: rogue.home[1] + 80, vx: 0, vy: 0, cool: 4, side: -1 }] })
+      .add(respawn)
   }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
 
