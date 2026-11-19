@@ -197,4 +197,7 @@ body::after {
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .flow-layer { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 40; }
-.game-layer { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 45; }
+.game-layer { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+section, footer, .marquee, .work { position: relative; z-index: 1; }
+.photo-gen { position: absolute; inset: 0; width: 100%; height: 100%; filter: grayscale(1) contrast(1.1); pointer-events: none; }
+.about-photo { position: relative; }

@@ -54,6 +54,29 @@ export function initFlow() {
     photoLum = new Float32Array(gridN)
     for (let i = 0; i < gridN; i++) photoLum[i] = (0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2]) / 255
   }
+  // overlay canvas on the photo, used while it is being generated
+  const gen = document.createElement('canvas'); gen.className = 'photo-gen'
+  document.querySelector('.about-photo').appendChild(gen)
+  const gctx = gen.getContext('2d'), small = document.createElement('canvas'), sctx = small.getContext('2d')
+  let lastShown = -1
+  function renderPhotoGen(k, pr) {
+    if (Math.abs(k - lastShown) < 0.002 && k !== 0 && k !== 1) return
+    lastShown = k
+    if (k >= 1) { gen.style.opacity = 0; document.querySelector('.about-photo img').style.opacity = 1; return }
+    document.querySelector('.about-photo img').style.opacity = 0
+    if (!photoImg.complete || !photoImg.naturalWidth || k <= 0) { gen.style.opacity = 0; return }
+    const w = Math.round(pr.width), h = Math.round(pr.height)
+    if (gen.width !== w || gen.height !== h) { gen.width = w; gen.height = h }
+    // block size goes from one tile per point down to one pixel
+    const e = k * k * (3 - 2 * k), cell = w / Math.max(1, gcols), bs = Math.max(1, cell * (1 - e) ** 2.2 + 1 - (1 - e))
+    const sw = Math.max(1, Math.round(w / bs)), sh = Math.max(1, Math.round(h / bs))
+    small.width = sw; small.height = sh
+    const iw = photoImg.naturalWidth, ih = photoImg.naturalHeight, sc = Math.max(sw / iw, sh / ih)
+    sctx.drawImage(photoImg, (sw - iw * sc) / 2, (sh - ih * sc) / 2, iw * sc, ih * sc)
+    gctx.imageSmoothingEnabled = bs < 2
+    gctx.clearRect(0, 0, w, h); gctx.drawImage(small, 0, 0, w, h)
+    gen.style.opacity = Math.min(1, k * 4).toFixed(3)
+  }
   size(); addEventListener('resize', size)
 
   const P = Array.from({ length: N }, (_, i) => ({
@@ -145,9 +168,9 @@ export function initFlow() {
     const e = clamp01((H * 0.95 - dr.top) / (H * 0.6))
     const f = clamp01((H - ctr.top) / (H * 0.55))
     const fadeIn = seg(y, heroH * 0.08, heroH * 0.3)
-    // the photo appears once the points have built it
-    const photoShown = clamp01((a - 0.75) / 0.25)
-    els.photoImg.style.opacity = (0.08 + 0.92 * photoShown).toFixed(3)
+    // the points build the photo: once they have landed, it develops from a coarse mosaic (one tile per point) to sharp
+    const photoShown = clamp01((a - 0.62) / 0.38)
+    renderPhotoGen(photoShown, pr)
     if (fadeIn <= 0) return
 
     for (const p of P) {
@@ -163,7 +186,7 @@ export function initFlow() {
       let alpha = fadeIn * (0.55 + 0.45 * p.r)
       // on the photo: faint dots, brighter where the photo is bright
       const onPhoto = stage === 1 ? ek : stage === 2 ? 1 - ek : 0
-      if (onPhoto > 0) alpha = alpha * (1 - onPhoto) + onPhoto * fadeIn * (p.i < gridN ? (0.12 + 0.8 * photoLum[p.i] ** 1.3) * (1 - 0.75 * photoShown) : 0)
+      if (onPhoto > 0) alpha = alpha * (1 - onPhoto) + onPhoto * fadeIn * (p.i < gridN ? (0.12 + 0.85 * photoLum[p.i] ** 1.3) * (1 - photoShown) ** 1.5 : 0)
 
       // on the Thales card the targets jump between cycles: glide instead
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {

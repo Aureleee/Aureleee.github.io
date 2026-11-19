@@ -155,6 +155,8 @@ const hero = (() => {
     // ---- the chase lives on its own fixed layer, in viewport coordinates, so it follows the visitor down the page
     const heroTop = cv.getBoundingClientRect().top
     gctx.clearRect(0, 0, W, H)
+    // full presence on the hero, a faint background game further down
+    gctx.globalAlpha = 0.22 + 0.78 * Math.max(0, Math.min(1, 1 + heroTop / (H * 0.7)))
     // drones leaving after the catch: spin up, then warp out with a streak and pop
     exits = exits.filter(e => {
       e.t += dt
@@ -236,11 +238,6 @@ const hero = (() => {
       bursts = bursts.filter(b => { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; gctx.fillStyle = `rgba(200,255,0,${b.life * 2})`; gctx.fillRect(b.x - 1, b.y - 1, 2, 2); return b.life > 0 })
       q.hit = Math.max(0, q.hit - dt)
       gctx.fillStyle = q.hit > 0 && Math.floor(time * 30) % 2 ? '#ffffff' : ACC; gctx.fillRect(q.x - 3, q.y - 3, 6, 6)
-      // tiny hint: shown for a few seconds, then only when the cursor gets close
-      q.h0 = q.h0 ?? time
-      const near = Math.hypot(q.x - gm.x, q.y - gm.y)
-      const ha = (near < 220 ? 1 - near / 220 : 0) * 0.75
-      if (ha > 0.02) { gctx.font = '11px JetBrains Mono'; gctx.fillStyle = `rgba(200,255,0,${ha})`; gctx.fillText('catch me', q.x + 12, q.y - 10) }
       document.documentElement.style.cursor = Math.hypot(q.x - gm.x, q.y - gm.y) < 26 ? 'pointer' : ''
     }
   }
