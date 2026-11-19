@@ -40,11 +40,10 @@ export function initLab() {
   let visible = false, autoplayed = false, scrubbing = false
 
   /* ---------- data ---------- */
-  const photo = new Image(); photo.src = 'photo.jpg'
+  const photo = new Image(); photo.src = 'lab.jpg'
   function loadImage() {
     hiRes = document.createElement('canvas'); hiRes.width = hiRes.height = 512
-    const s = photo.naturalWidth, y0 = photo.naturalHeight * 0.06
-    hiRes.getContext('2d').drawImage(photo, 0, y0, s, s, 0, 0, 512, 512)
+    hiRes.getContext('2d').drawImage(photo, 0, 0, 512, 512)
     // image pyramid: continuous blur = cross-fade between two levels (works in every browser)
     pyr = [hiRes]
     for (let n = 256; n >= 4; n /= 2) { const c = document.createElement('canvas'); c.width = c.height = n; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(pyr[pyr.length - 1], 0, 0, n, n); pyr.push(c) }
