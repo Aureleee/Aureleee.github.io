@@ -38,7 +38,7 @@ export function initLab() {
   let zt = null, z2 = null, stream = [], emitAcc = 0, t = 0, phase = 'idle', pt = 0, parts = [], cellArrive = null
   let sparks = [], ripples = [], film = [], nextShot = 1, rippleT = 0
   let visible = false, autoplayed = false, scrubbing = false
-  let zS = null, mask = null, maskTint = null, ctxVec = [], pulses = []
+  let zS = null, mask = null, maskTint = null, ctxVec = [], pulses = [], cvecBox = null
 
   /* ---------- data ---------- */
   const photo = new Image(); photo.src = 'lab.jpg'            // the result: the scene with me painted in
@@ -61,7 +61,7 @@ export function initLab() {
     // the mask, in latent cells, and a lime tint of it to show on the input
     const mc = document.createElement('canvas'); mc.width = mc.height = L; mc.getContext('2d').drawImage(maskImg, 0, 0, L, L)
     const md = mc.getContext('2d').getImageData(0, 0, L, L).data
-    mask = Float32Array.from({ length: L * L }, (_, i) => md[4 * i] / 255)
+    mask = Float32Array.from({ length: L * L }, () => 1); void md
     maskTint = document.createElement('canvas'); maskTint.width = maskTint.height = 256
     const tg = maskTint.getContext('2d'); tg.drawImage(maskImg, 0, 0, 256, 256)
     const td = tg.getImageData(0, 0, 256, 256)
@@ -321,11 +321,14 @@ export function initLab() {
     const { lat, lat2 } = lay, fs = lay.fs, rev = phase === 'reverse'
     const gx0 = lat[0] + lat[2], gx1 = lat2[0], cw = Math.min((gx1 - gx0) * 0.62, lat[2] * 0.95), cx = (gx0 + gx1) / 2
     const cell = cw / 12, y0 = lat[1] - cell * 0.6, x0 = cx - cw / 2
+    cvecBox = [x0, y0, cw, cell * 2]
     ctx.font = `${fs * 0.85}px JetBrains Mono`; ctx.textAlign = 'center'; ctx.fillStyle = rev ? ACC : '#6a6a64'
-    ctx.fillText('c = E(prompt)', cx, y0 - fs * 0.7)
+    ctx.fillText(phase === 'forward' ? 'encoding the prompt…' : 'c = E(prompt)', cx, y0 - fs * 0.7)
+    const enc = phase === 'forward' ? clamp01((pt / DUR.forward - 0.2) / 0.8) : phase === 'idle' || phase === 'encode' ? 0 : 1
     for (let i = 0; i < 24; i++) {
       const v = ctxVec[i], k = cmapIdx(v * 1.1)
-      ctx.globalAlpha = rev ? 0.95 : 0.6
+      ctx.strokeStyle = '#2e2e2c'; ctx.lineWidth = 1; ctx.strokeRect(x0 + (i % 12) * cell + 1.5, y0 + Math.floor(i / 12) * cell + 1.5, cell - 3, cell - 3)
+      ctx.globalAlpha = clamp01(enc * 1.3 - (i / 24) * 0.3) * (rev ? 0.95 : 0.75)
       ctx.fillStyle = `rgb(${LUT[k]},${LUT[k + 1]},${LUT[k + 2]})`
       ctx.fillRect(x0 + (i % 12) * cell + 1, y0 + Math.floor(i / 12) * cell + 1, cell - 2, cell - 2)
     }
@@ -397,5 +400,5 @@ export function initLab() {
   gsap.ticker.add((_, dt) => { if (!visible || !lay) return; if (z0 && phase !== 'idle' && phase !== 'done') update(Math.min(dt, 50) / 1000); draw() })
 
   window.__dm = () => ({ phase, pt, t })
-  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k) } }
+  window.__lab = () => { if (!lay) return null; const k = W / cv.clientWidth; return { phase, tau: phase === 'forward' ? clamp01(pt / DUR.forward) : 0, lat: lay.lat.map(v => v / k), cvec: cvecBox && cvecBox.map(v => v / k) } }
 }

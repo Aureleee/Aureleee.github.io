@@ -190,11 +190,15 @@ export function initFlow() {
     const st5 = p => {
       if (!lab) return [dr.left + dr.width / 2, dr.top]
       const [lx, ly, lp] = lab.lat
-      // the points circle the latent, waiting to become its noise
-      const a = p.u * Math.PI * 2 + time * (0.35 + 0.25 * p.r), rr = lp * (0.62 + 0.22 * p.v) + Math.sin(time * 1.3 + p.i) * 3
-      return [dr.left + lx + lp / 2 + Math.cos(a) * rr, dr.top + ly + lp / 2 + Math.sin(a) * rr * 0.85]
+      // a cloud above the latent and the prompt vector, waiting
+      const cv2 = lab.cvec, x1 = lx, x2 = cv2 ? cv2[0] + cv2[2] : lx + lp
+      return [dr.left + x1 + (x2 - x1) * p.u + Math.sin(time * 0.9 + p.i) * 6, dr.top + ly - lp * 0.42 + p.e2 * lp * 0.09 + Math.cos(time * 1.1 + p.i * 1.7) * 4]
     }
-    const cell = p => { const [lx, ly, lp] = lab.lat, c = p.hk % (32 * 32); return [dr.left + lx + ((c % 32) + 0.5) * lp / 32, dr.top + ly + (Math.floor(c / 32) + 0.5) * lp / 32] }
+    // half of the cloud diffuses into the latent (the Gaussian noise), the other half encodes the prompt
+    const cell = p => {
+      if (p.i % 2 && lab.cvec) { const [cx, cy, cw, ch] = lab.cvec, k = p.hk % 24; return [dr.left + cx + ((k % 12) + 0.5) * cw / 12, dr.top + cy + (Math.floor(k / 12) + 0.5) * ch / 2] }
+      const [lx, ly, lp] = lab.lat, c = p.hk % (32 * 32); return [dr.left + lx + ((c % 32) + 0.5) * lp / 32, dr.top + ly + (Math.floor(c / 32) + 0.5) * lp / 32]
+    }
 
     const ctr = els.contact.getBoundingClientRect()
     const st6 = p => { const q = words[p.i % words.length]; return [W / 2 + q[0] + Math.sin(time * 1.2 + p.i) * 0.6, ctr.top + H * 0.07 + q[1]] }

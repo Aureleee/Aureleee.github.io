@@ -177,7 +177,9 @@ body::after {
 .dm-prompt { flex: 1; min-width: 260px; display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; transition: border-color .25s; }
 .dm-prompt:focus-within { border-color: var(--acc); }
 .dm-prompt .mono { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--acc); }
-.dm-prompt input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 16px; }
+.dm-prompt { cursor: text; }
+.dm-prompt input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 16px; cursor: text; caret-color: var(--acc); }
+.dm-prompt::after { content: 'edit ↵'; font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #5a5a55; }
 .dm-btn {
   display: inline-flex; align-items: center; gap: 10px; cursor: pointer; flex-shrink: 0;
   background: var(--acc); color: var(--bg); border: 0; border-radius: 99px; padding: 14px 22px;
