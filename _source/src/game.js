@@ -20,24 +20,25 @@ const TYPES = {
   boss:     { hp: 90,  r: 15, sp: 10, coin: 110, dmg: 60, gun: 1.2, boss: true, spawn: 2.2, keep: 300 },
 }
 // bigger targets, a bit tougher (the cannon fires on its own)
-for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= 1.25 }
+for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= T.boss ? 0.65 : 0.7; T.coin = Math.ceil(T.coin * 2.5) }
 // [time (s), type, count, extra hp, gap between units]
 const LEVELS = [
   { name: 'warm-up', waves: [[0.5, 'drift', 4], [3, 'drone', 1], [5, 'swarm', 6, 0, 0.25], [8, 'drift', 5], [11, 'zig', 3], [13, 'drone', 1], [15, 'swarm', 8, 0, 0.2]] },
   { name: 'first boss', waves: [[0.5, 'zig', 4], [2, 'drone', 2], [4, 'swarm', 14, 0, 0.1], [7, 'splitter', 3], [10, 'drift', 6], [12, 'mini', 1], [15, 'swarm', 16, 0, 0.1]] },
-  { name: 'they shoot back', waves: [[0.5, 'shooter', 2], [1.5, 'drone', 3], [3, 'swarm', 18, 0, 0.08], [6, 'tank', 2], [9, 'splitter', 4], [11, 'mini', 1], [11.5, 'mini', 1], [15, 'zig', 8, 1]] },
-  { name: 'heavy noise', waves: [[0.5, 'tank', 3, 2], [2, 'swarm', 24, 0, 0.07], [4, 'drone', 4, 1], [6, 'shooter', 3], [8, 'boss', 1], [11, 'splitter', 5, 1], [14, 'swarm', 24, 0, 0.07]] },
-  { name: 'the big one', waves: [[0.5, 'boss', 1, 30], [3, 'swarm', 30, 0, 0.06], [5, 'drone', 4, 2], [8, 'mini', 2], [11, 'shooter', 4, 2], [14, 'boss', 1], [16, 'splitter', 6, 2], [19, 'swarm', 30, 0, 0.06]] },
+  { name: 'they shoot back', waves: [[0.5, 'shooter', 2], [1.5, 'drone', 3], [3, 'swarm', 18, 0, 0.08], [6, 'tank', 2], [9, 'splitter', 4], [11, 'mini', 1], [11.5, 'mini', 1], [15, 'zig', 8]] },
+  { name: 'heavy noise', waves: [[0.5, 'tank', 3], [2, 'swarm', 24, 0, 0.07], [4, 'drone', 4], [6, 'shooter', 3], [8, 'boss', 1], [11, 'splitter', 5], [14, 'swarm', 24, 0, 0.07]] },
+  { name: 'the big one', waves: [[0.5, 'boss', 1], [3, 'swarm', 30, 0, 0.06], [5, 'drone', 4], [8, 'mini', 2], [11, 'shooter', 4], [14, 'boss', 1], [16, 'splitter', 6], [19, 'swarm', 30, 0, 0.06]] },
 ]
-const DMG = [0, 1, 1.5, 2.2, 3.2], RATE = [0, 0.42, 0.32, 0.24, 0.17], KEEP = [0, 0.55, 0.72, 0.86], LDMG = [0, 4, 7, 11]
+const DMG = [0, 1.2, 2.2, 3.4, 5], RATE = [0, 0.3, 0.21, 0.15, 0.1], SPEED = [0, 950, 1150, 1380, 1650], KEEP = [0, 0.55, 0.72, 0.86], LDMG = [0, 4, 7, 11]
 const SHOP = [
-  { id: 'dmg',    name: 'Power',     desc: 'cannon damage', lvl: s => s.dl, max: 4, cost: l => [40, 100, 200][l - 1] },
-  { id: 'rate',   name: 'Fire rate', desc: 'pof pof pof, faster', lvl: s => s.rl, max: 4, cost: l => [35, 90, 180][l - 1] },
-  { id: 'multi',  name: 'Multishot', desc: '+1 shell in a fan', lvl: s => s.multi, max: 5, cost: l => [60, 130, 220, 340][l - 1] },
-  { id: 'bounce', name: 'Rebound',   desc: 'shots bounce off the walls', lvl: s => s.bounce, max: 3, cost: l => [50, 120, 230][l] },
-  { id: 'pierce', name: 'Pierce',    desc: 'goes through, weaker each hit', lvl: s => s.pierce, max: 3, cost: l => [55, 120, 210][l] },
-  { id: 'laser',  name: 'Laser',     desc: 'right click: hold, release', lvl: s => s.laser, max: 3, cost: l => [120, 160, 260][l] },
-  { id: 'turret', name: 'Turret',    desc: '+1 turret around the core', lvl: s => s.turrets, max: 6, cost: l => [50, 90, 140, 200, 270, 350][l] },
+  { id: 'dmg',    name: 'Power',     desc: 'cannon damage', lvl: s => s.dl, max: 4, cost: l => [25, 60, 120][l - 1] },
+  { id: 'rate',   name: 'Fire rate', desc: 'pof pof pof, faster', lvl: s => s.rl, max: 4, cost: l => [25, 60, 120][l - 1] },
+  { id: 'speed',  name: 'Velocity',  desc: 'faster shells', lvl: s => s.vl, max: 4, cost: l => [20, 50, 100][l - 1] },
+  { id: 'multi',  name: 'Multishot', desc: '+2 shells in a fan', lvl: s => s.multi, max: 5, cost: l => [40, 90, 160, 250][l - 1] },
+  { id: 'bounce', name: 'Rebound',   desc: 'shots bounce off the walls', lvl: s => s.bounce, max: 3, cost: l => [35, 80, 150][l] },
+  { id: 'pierce', name: 'Pierce',    desc: 'goes through, weaker each hit', lvl: s => s.pierce, max: 3, cost: l => [35, 80, 150][l] },
+  { id: 'laser',  name: 'Laser',     desc: 'right click: hold, release', lvl: s => s.laser, max: 3, cost: l => [80, 120, 200][l] },
+  { id: 'turret', name: 'Turret',    desc: '+1 turret around the core', lvl: s => s.turrets, max: 6, cost: l => [35, 60, 100, 150, 210, 280][l] },
   { id: 'focus',  name: 'Focus',     desc: '+1 s of slow motion', lvl: s => s.focusMax, max: 5, cost: l => [35, 70, 120, 180][l - 1] },
   { id: 'repair', name: 'Repair',    desc: 'turrets + 35 signal', lvl: () => 0, max: 99, cost: () => 25 },
 ]
@@ -124,8 +125,8 @@ export function initGame({ lenis }) {
 
   function start(x, y, hpLeft = 3) {
     if (S.active) return
-    Object.assign(S, { active: true, coins: 0, signal: 100, score: 0, combo: 0, enemies: [], pend: [], bolts: [], foes: [], fx: [], texts: [], focus: 2, reload: 0 })
-    S.stats = { dl: 1, dmg: 1, rl: 1, multi: 1, bounce: 0, pierce: 0, laser: 0, turrets: 1, focusMax: 2 }
+    Object.assign(S, { active: true, coins: 40, signal: 100, score: 0, combo: 0, enemies: [], pend: [], bolts: [], foes: [], fx: [], texts: [], focus: 2, reload: 0 })
+    S.stats = { dl: 1, dmg: 1, rl: 1, vl: 1, multi: 1, bounce: 0, pierce: 0, laser: 0, turrets: 1, focusMax: 2 }
     lenis?.scrollTo(0, { duration: 0.8 }); setTimeout(() => lenis?.stop(), 820)
     document.documentElement.classList.add('gaming')
     window.__gameArena?.on()
@@ -162,6 +163,7 @@ export function initGame({ lenis }) {
       const st = S.stats
       if (it.id === 'dmg') { st.dl++; st.dmg = DMG[st.dl] }
       if (it.id === 'rate') st.rl++
+      if (it.id === 'speed') st.vl++
       if (it.id === 'laser') st.laser++
       if (it.id === 'multi') st.multi++
       if (it.id === 'bounce') st.bounce++
@@ -180,7 +182,7 @@ export function initGame({ lenis }) {
   }
   function levelCleared() {
     S.phase = 'shop'
-    const bonus = 20 * S.level; S.coins += bonus
+    const bonus = 60 * S.level; S.coins += bonus
     updHud(); renderShop(true, bonus)
   }
   function win() {
@@ -217,10 +219,11 @@ export function initGame({ lenis }) {
   const charge = () => M.laser ? Math.min(1, (performance.now() - M.lt0) / 900) : 0
 
   function fireCannon() {
-    const C = core(), base = Math.atan2(M.y - C.y, M.x - C.x), n = S.stats.multi, spread = n > 1 ? Math.min(0.7, 0.12 * (n - 1)) : 0
+    const C = core(), base = Math.atan2(M.y - C.y, M.x - C.x), n = 1 + 2 * (S.stats.multi - 1), spread = n > 1 ? Math.min(0.9, 0.1 * (n - 1)) : 0
     for (let k = 0; k < n; k++) {
       const a = base + (n > 1 ? -spread / 2 + spread * k / (n - 1) : 0)
-      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * 760, vy: Math.sin(a) * 760, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 2.2 })
+      const v = SPEED[S.stats.vl]
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     S.recoil = 1
     S.reload = RATE[S.stats.rl]
@@ -403,10 +406,10 @@ export function initGame({ lenis }) {
       const A = arena()
       S.shells = S.shells.filter(b => {
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt
-        if (b.x < A.x0 || b.x > A.x1) { if (b.bounces-- > 0) { b.vx = -b.vx; b.x = Math.max(A.x0, Math.min(A.x1, b.x)); b.hits.clear(); burst(b.x, b.y, FG, 4, 90) } else { burst(b.x, b.y, FG, 5, 90); return false } }
-        if (b.y < A.y0 || b.y > A.y1) { if (b.bounces-- > 0) { b.vy = -b.vy; b.y = Math.max(A.y0, Math.min(A.y1, b.y)); b.hits.clear(); burst(b.x, b.y, FG, 4, 90) } else { burst(b.x, b.y, FG, 5, 90); return false } }
+        if (b.x < A.x0 || b.x > A.x1) { if (b.bounces-- > 0) { b.vx = -b.vx; b.x = b.x < A.x0 ? 2 * A.x0 - b.x : 2 * A.x1 - b.x; b.hits.clear(); burst(b.x, b.y, FG, 6, 110) } else { burst(b.x, b.y, FG, 5, 90); return false } }
+        if (b.y < A.y0 || b.y > A.y1) { if (b.bounces-- > 0) { b.vy = -b.vy; b.y = b.y < A.y0 ? 2 * A.y0 - b.y : 2 * A.y1 - b.y; b.hits.clear(); burst(b.x, b.y, FG, 6, 110) } else { burst(b.x, b.y, FG, 5, 90); return false } }
         for (let k = S.foes.length - 1; k >= 0; k--) { const f = S.foes[k]; if (Math.hypot(f.x - b.x, f.y - b.y) < 7) { S.foes.splice(k, 1); burst(f.x, f.y, RED, 6, 100); return false } }
-        for (const e of S.enemies) if (!b.hits.has(e) && Math.hypot(e.x - b.x, e.y - b.y) < e.T.r + 6) {
+        for (const e of S.enemies) if (!b.hits.has(e) && Math.hypot(e.x - b.x, e.y - b.y) < e.T.r + 11) {
           b.hits.add(e); damage(e, b.dmg)
           if (!b.pierce) return false
           b.dmg *= KEEP[b.pierce]; if (b.dmg < 0.25) return false
