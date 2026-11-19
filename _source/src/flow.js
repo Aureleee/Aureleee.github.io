@@ -103,15 +103,15 @@ export function initFlow() {
       const sx = tr.width / T.W, sy = tr.height / T.H
       const map = (x, yy) => [tr.left + (T.W / 2 + (x - T.camX) * T.z) * sx, tr.top + (T.H / 2 + (yy - T.camY) * T.z) * sy]
       const q = T.pts[Math.floor(p.i / N * T.pts.length)] || { x: T.cx, y: T.cy }
-      // loose orbit, each point on its own radius and speed
-      const ang = p.r * 40 + time * (0.25 + p.r * 0.5), orb = T.R * (1.4 + 2.2 * p.u)
-      const gx = T.cx + Math.cos(ang) * orb, gy = T.cy + Math.sin(ang) * orb * 0.55
-      const pull = ease(clamp01((T.p - 0.3) / 0.12))                    // gravitate → inside the mask
-      const mx = gx + (T.cx + p.e1 * T.R * 0.45 - gx) * pull, my = gy + (T.cy + p.e2 * T.R * 0.3 - gy) * pull
-      const m = ease(clamp01((T.p - 0.42) / 0.22))                      // mask → tank shape
-      const lift = ease(clamp01((T.p - 0.94) / 0.06))                   // next cycle: leave the tank
-      const k = m * (1 - lift)
-      return map(mx + (q.x - mx) * k, my + (q.y - my) * k)
+      // between two tanks the points drift as a cloud over the whole drone view (screen space, so the zoom never throws them away)
+      const cx0 = tr.left + tr.width * (0.04 + 0.92 * p.u) + Math.sin(time * 0.3 + p.i) * tr.width * 0.02
+      const cy0 = tr.top + tr.height * (0.06 + 0.88 * p.v) + Math.cos(time * 0.27 + p.i * 1.7) * tr.height * 0.02
+      const lift = ease(clamp01((T.p - 0.78) / 0.14))                   // zoom out: tank → cloud
+      const pull = ease(clamp01((T.p - 0.3) / 0.12)) * (1 - lift)       // zoom in: cloud → mask
+      const m = ease(clamp01((T.p - 0.42) / 0.22)) * (1 - lift)         // mask → tank shape
+      const [mx, my] = map(T.cx + p.e1 * T.R * 0.45, T.cy + p.e2 * T.R * 0.3), [qx, qy] = map(q.x, q.y)
+      const ax = cx0 + (mx - cx0) * pull, ay = cy0 + (my - cy0) * pull
+      return [ax + (qx - ax) * m, ay + (qy - ay) * m]
     }
 
     // RetinaNet: one point per data packet travelling through the network, the rest wait at the input
@@ -160,10 +160,10 @@ export function initFlow() {
       // on the Thales card the targets jump between cycles: glide instead
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {
         if (p.tx === null) { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
-        const forming = T && T.p > 0.4 && T.p < 0.95, K = forming ? 70 : 6 + 10 * p.r, damp = 2 * Math.sqrt(K) * (forming ? 0.95 : 0.55)
+        const forming = T && T.p > 0.4 && T.p < 0.8, K = forming ? 70 : 6 + 10 * p.r, damp = 2 * Math.sqrt(K) * (forming ? 0.95 : 0.55)
         p.vx += ((x - p.tx) * K - p.vx * damp) * fdt; p.vy += ((yy - p.ty) * K - p.vy * damp) * fdt
         p.tx += p.vx * fdt; p.ty += p.vy * fdt; x = p.tx; yy = p.ty
-        if (T && T.p > 0.66 && T.p < 0.94) alpha *= 0.55
+        if (T && T.p > 0.66 && T.p < 0.8) alpha *= 0.55
       } else { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
 
       // in the lab: these particles are the noise falling into the latent
