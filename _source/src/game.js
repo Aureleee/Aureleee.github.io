@@ -1,6 +1,6 @@
 /*
   "Denoise": the hidden game. One shot at the escaping pixel opens it.
-  You are the core in the middle of the arena. Left mouse: the cannon (hold for auto-fire).
+  You are the core in the middle of the arena. The cannon fires on its own toward the mouse.
   Right mouse, once bought: a charged laser (hold, release). Shift or charging slows time.
   Noise comes from the walls toward the core. Kills give ◆; the shop (B) is open at any time.
   Five levels, bosses from level 2. Clear level 5 and the name turns into the X.
@@ -19,6 +19,8 @@ const TYPES = {
   mini:     { hp: 30,  r: 10, sp: 15, coin: 40, dmg: 30, gun: 1.7, boss: true, keep: 260 },
   boss:     { hp: 90,  r: 15, sp: 10, coin: 110, dmg: 60, gun: 1.2, boss: true, spawn: 2.2, keep: 300 },
 }
+// bigger targets, a bit tougher (the cannon fires on its own)
+for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= 1.25 }
 // [time (s), type, count, extra hp, gap between units]
 const LEVELS = [
   { name: 'warm-up', waves: [[0.5, 'drift', 4], [3, 'drone', 1], [5, 'swarm', 6, 0, 0.25], [8, 'drift', 5], [11, 'zig', 3], [13, 'drone', 1], [15, 'swarm', 8, 0, 0.2]] },
@@ -130,7 +132,7 @@ export function initGame({ lenis }) {
     S.drones = [newDrone()]; S.shells = []; S.beams = []
     startLevel(1)
     materialise('zig', hpLeft - TYPES.zig.hp, x, y)       // the escaping pixel is the first enemy, with its 3 lives
-    say('DENOISE', 'aim · click or hold to fire · B for the shop', 2.8)
+    say('DENOISE', 'aim with the mouse · it fires on its own · B for the shop', 2.8)
   }
   function quit(win = false) {
     Object.assign(S, { active: false, phase: 'off', enemies: [], pend: [], bolts: [], foes: [] })
@@ -292,7 +294,7 @@ export function initGame({ lenis }) {
       window.__ts = S.ts
       const dt = rdt * S.ts, t = now / 1000, C = core()
       S.reload = Math.max(0, S.reload - dt); S.recoil = Math.max(0, (S.recoil || 0) - rdt * 8)
-      if (playing && M.fire && S.reload <= 0) fireCannon()
+      if (playing && S.reload <= 0 && M.x > -1e3) fireCannon()          // auto-fire toward the mouse
       S.comboT -= dt; if (S.comboT <= 0 && S.combo) { S.combo = 0; updHud() }
       if (S.ts < 0.9 && playing) {
         const k = (1 - S.ts) * 0.6, gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75)
