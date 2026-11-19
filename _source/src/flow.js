@@ -18,7 +18,7 @@ export function initFlow() {
   cv.className = 'flow-layer'
   document.body.appendChild(cv)
   const ctx = cv.getContext('2d')
-  const mob = innerWidth < 800, N = mob ? 160 : 280
+  const mob = innerWidth < 800, N = mob ? 320 : 520
   let W = 0, H = 0, dpr = 1, words = []
   const size = () => {
     dpr = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight
@@ -41,6 +41,24 @@ export function initFlow() {
     for (let i = 0; i < N; i++) out.push(pts[Math.floor((i + Math.random() * 0.9) / N * pts.length) % pts.length])
     return out.sort(() => Math.random() - 0.5)
   }
+  // École Polytechnique, written compactly with the same points under the photo
+  function sampleSchool(width) {
+    const lines = ['ÉCOLE', 'POLYTECHNIQUE'], o = document.createElement('canvas'), g = o.getContext('2d')
+    let fs = 40; g.font = `800 ${fs}px Syne`
+    fs = Math.min(fs * width / g.measureText(lines[1]).width, 54)
+    o.width = Math.ceil(width) + 4; o.height = Math.ceil(fs * 2.1)
+    g.font = `800 ${fs}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
+    g.fillText(lines[0], o.width / 2, fs * 0.55); g.fillText(lines[1], o.width / 2, fs * 1.55)
+    const d = g.getImageData(0, 0, o.width, o.height).data, pts = []
+    for (let y = 0; y < o.height; y += 1) for (let x = 0; x < o.width; x += 1) if (d[4 * (y * o.width + x) + 3] > 140) pts.push([x - o.width / 2, y])
+    for (let i = pts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[pts[i], pts[j]] = [pts[j], pts[i]] }
+    // spread the N points evenly over the glyphs
+    const out = [], cell = Math.sqrt(pts.length / N) * 0.9, seen = new Set()
+    for (const q of pts) { const k = Math.round(q[0] / cell) + ',' + Math.round(q[1] / cell); if (!seen.has(k)) { seen.add(k); out.push(q) } if (out.length >= N) break }
+    while (out.length < N) out.push(pts[out.length % pts.length])
+    return out
+  }
+  let school = [], schoolW = 0
   size(); addEventListener('resize', size)
 
   const P = Array.from({ length: N }, (_, i) => ({
@@ -51,15 +69,15 @@ export function initFlow() {
 
   const $ = s => document.querySelector(s)
   const els = {
-    hero: $('#particles'), photo: $('.about-photo'), about: $('.about'), cards: [...document.querySelectorAll('.proj')],
+    hero: $('#particles'), photo: $('.about-photo'), sub: $('.about .sub'), about: $('.about'), cards: [...document.querySelectorAll('.proj')],
     card1: $('canvas[data-kind=tiles]'), dm: $('#dm'), contact: $('.contact'),
   }
   const absTop = el => el.getBoundingClientRect().top + scrollY
   const stickTop = el => parseFloat(getComputedStyle(el).top) || 0
   const arrive = el => { const r = el.getBoundingClientRect(), s = stickTop(el); return clamp01((H * 0.95 - r.top) / Math.max(1, H * 0.95 - s)) }
 
-  gsap.ticker.add(() => {
-    const time = performance.now() / 1000, y = scrollY
+  gsap.ticker.add((_, dtm) => {
+    const fdt = Math.min(0.033, dtm / 1000), time = performance.now() / 1000, y = scrollY
     ctx.clearRect(0, 0, W, H)
     const heroT = window.__heroTargets
     if (!heroT || !heroT.length) return
@@ -69,10 +87,9 @@ export function initFlow() {
     const st0 = p => { const q = heroT[p.hk % heroT.length]; return [hr.left + q[0], hr.top + q[1]] }
 
     const pr = els.photo.getBoundingClientRect()
-    const st1 = p => {
-      const a = 2 * Math.PI * p.i / N + time * 0.22, wob = 1 + 0.05 * Math.sin(time * 1.3 + p.i)
-      return [pr.left + pr.width / 2 + Math.cos(a) * pr.width * 0.66 * wob + p.e1 * 4, pr.top + pr.height / 2 + Math.sin(a) * pr.height * 0.58 * wob + p.e2 * 4]
-    }
+    const sr = els.sub.getBoundingClientRect(), sw = Math.min(sr.width, mob ? W * 0.8 : 440)
+    if (Math.abs(sw - schoolW) > 2) { schoolW = sw; school = sampleSchool(sw) }
+    const st1 = p => { const q = school[p.i]; return [sr.left + sw / 2 + q[0] + Math.sin(time * 1.4 + p.i) * 0.5, sr.bottom + 34 + q[1] + Math.cos(time * 1.1 + p.i) * 0.5] }
 
     // SyncTweedies: synced most of the time, a short burst of noise now and then
     const cr = els.card1.getBoundingClientRect(), noise = Math.max(0, Math.sin(time * 0.55)) ** 4
@@ -83,9 +100,10 @@ export function initFlow() {
 
     // Thales: the points gather around the inpainting mask, then become the generated tank
     const T = window.__thales
+    const tr = T ? T.el.getBoundingClientRect() : null
     const st3 = p => {
       if (!T) return [cr.left, cr.top]
-      const tr = T.el.getBoundingClientRect(), sx = tr.width / T.W, sy = tr.height / T.H
+      const sx = tr.width / T.W, sy = tr.height / T.H
       const map = (x, yy) => [tr.left + (T.W / 2 + (x - T.camX) * T.z) * sx, tr.top + (T.H / 2 + (yy - T.camY) * T.z) * sy]
       const q = T.pts[Math.floor(p.i / N * T.pts.length)] || { x: T.cx, y: T.cy }
       // loose orbit, each point on its own radius and speed
@@ -101,9 +119,10 @@ export function initFlow() {
 
     // RetinaNet: one point per data packet travelling through the network, the rest wait at the input
     const RN = window.__retina
+    const rr = RN ? RN.el.getBoundingClientRect() : null, rk = RN ? rr.width / RN.W() : 1
     const st4 = p => {
       if (!RN) return [cr.left, cr.top]
-      const rr = RN.el.getBoundingClientRect(), k = rr.width / RN.W()
+      const k = rk
       const q = RN.route(p.i, (time * 0.22 + p.r) % 1)
       return [rr.left + q[0] * k, rr.top + q[1] * k]
     }
@@ -127,6 +146,7 @@ export function initFlow() {
     const e = clamp01((H * 0.95 - dr.top) / (H * 0.6))
     const f = clamp01((H - ctr.top) / (H * 0.55))
     const fadeIn = seg(y, heroH * 0.08, heroH * 0.3)
+    if (fadeIn <= 0) return
 
     for (const p of P) {
       let A, B, k, scatter, stage
@@ -142,10 +162,12 @@ export function initFlow() {
 
       // on the Thales card the targets jump between cycles: glide instead
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {
-        if (p.tx === null) { p.tx = x; p.ty = yy }
-        p.tx += (x - p.tx) * 0.12; p.ty += (yy - p.ty) * 0.12; x = p.tx; yy = p.ty
+        if (p.tx === null) { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
+        const forming = T && T.p > 0.4 && T.p < 0.95, K = forming ? 70 : 6 + 10 * p.r, damp = 2 * Math.sqrt(K) * (forming ? 0.95 : 0.55)
+        p.vx += ((x - p.tx) * K - p.vx * damp) * fdt; p.vy += ((yy - p.ty) * K - p.vy * damp) * fdt
+        p.tx += p.vx * fdt; p.ty += p.vy * fdt; x = p.tx; yy = p.ty
         if (T && T.p > 0.66 && T.p < 0.94) alpha *= 0.55
-      } else { p.tx = x; p.ty = yy }
+      } else { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
 
       // in the lab: these particles are the noise falling into the latent
       if (stage === 5 && ek >= 1 && lab) {

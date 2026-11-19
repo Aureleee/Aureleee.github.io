@@ -46,7 +46,7 @@ if (!isTouch) {
 const hero = (() => {
   const cv = document.getElementById('particles'), ctx = cv.getContext('2d')
   const tstep = document.getElementById('tstep')
-  let W, H, dpr, P = [], F = [], M = 0, rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
+  let W, H, dpr, P = [], F = [], M = 0, DANCE = 0, SPIN = 0, rogue = null, hunters = [], shots = [], bursts = [], caught = false, WB = { y0: 0, h: 1 }, t = 1, scrollT = 0, lastT = performance.now()
   const mouse = { x: -1e4, y: -1e4 }
 
   function build() {
@@ -139,7 +139,12 @@ const hero = (() => {
       if (p.loose) { fx += 16 * Math.sin(time * 0.8 + p.lp) + 8 * Math.sin(time * 1.9 + p.lp * 2); fy += 11 * Math.cos(time * 0.65 + p.lp * 1.3) }
       const m = M <= 0 ? 0 : easeIO(Math.max(0, Math.min(1, M * 1.6 - p.d * 0.6)))
       const ch = Math.sin(Math.PI * m) * p.cr, ang = p.ca + m * 5 + time * 0.8
-      const bx = p.tx + (p.xx - p.tx) * m + Math.cos(ang) * ch, by = p.ty + (p.xy - p.ty) * m + Math.sin(ang) * ch * 0.8
+      let bx = p.tx + (p.xx - p.tx) * m + Math.cos(ang) * ch, by = p.ty + (p.xy - p.ty) * m + Math.sin(ang) * ch * 0.8
+      if (DANCE > 0 && m > 0) {   // little dance of the X: sway, hop, pulse and one full spin
+        const k = DANCE * m, dxx = bx - W / 2, dyy = by - H * 0.45, ang = (0.2 * Math.sin(time * 5) + SPIN) * k, sc = 1 + 0.07 * Math.sin(time * 10) * k
+        bx = W / 2 + (dxx * Math.cos(ang) - dyy * Math.sin(ang)) * sc
+        by = H * 0.45 + (dxx * Math.sin(ang) + dyy * Math.cos(ang)) * sc - Math.abs(Math.sin(time * 5)) * 26 * k
+      }
       const x0 = cx + a * (bx - cx) + b * p.ex + fx, y0 = cy + a * (by - cy) + b * p.ey + fy
       const dx = x0 + p.ox - mouse.x, dy = y0 + p.oy - mouse.y, d2 = dx * dx + dy * dy
       if (d2 < 12000) { const f = (12000 - d2) / 12000 * 2.2, d = Math.sqrt(d2) + 1e-3; p.vx += dx / d * f; p.vy += dy / d * f }
@@ -176,7 +181,7 @@ const hero = (() => {
         h.cool -= dt
         if (h.cool <= 0 && dist < 420) {
           const v = 430, tt2 = dist / v, ax = q.x + q.vx * tt2 * 0.8 - h.x, ay = q.y + q.vy * tt2 * 0.8 - h.y, an = Math.hypot(ax, ay) + 1e-3
-          shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 99 })
+          shots.push({ x: h.x, y: h.y, vx: ax / an * v, vy: ay / an * v, life: 99, age: 0 })
           h.cool = 0.8 + Math.random() * 0.9
         }
         const ang = Math.atan2(uy, ux)
@@ -187,13 +192,13 @@ const hero = (() => {
         ctx.restore()
       }
       shots = shots.filter(s => {
-        s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt
+        s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; s.age += dt
         // blasts shove the particles of the name they fly through
         for (const p of P) {
           const bx = p.ox, dxp = s.x - (p.tx + bx), dyp = s.y - (p.ty + p.oy)
           if (dxp * dxp + dyp * dyp < 220) { p.vx -= dxp * 0.08 + s.vx * 0.004; p.vy -= dyp * 0.08 + s.vy * 0.004 }
         }
-        if (Math.hypot(s.x - q.x, s.y - q.y) < 8) {
+        if (s.age < 1.4 && Math.hypot(s.x - q.x, s.y - q.y) < 8) {
           q.hit = 0.35; q.vx += s.vx * 0.9; q.vy += s.vy * 0.9
           for (let k = 0; k < 14; k++) { const a2 = Math.random() * 7, v2 = 60 + Math.random() * 160; bursts.push({ x: q.x, y: q.y, vx: Math.cos(a2) * v2, vy: Math.sin(a2) * v2, life: 0.5 }) }
           setTimeout(() => triggerX(), 250)
@@ -209,7 +214,7 @@ const hero = (() => {
       // tiny hint: shown for a few seconds, then only when the cursor gets close
       q.h0 = q.h0 ?? time
       const near = Math.hypot(q.x - mouse.x, q.y - mouse.y)
-      const ha = Math.max(Math.max(0, 1 - (time - q.h0 - 2.5) / 1.5) * Math.min(1, (time - q.h0) / 1), near < 280 ? 1 - near / 280 : 0) * 0.7
+      const ha = (near < 220 ? 1 - near / 220 : 0) * 0.75
       if (ha > 0.02) { ctx.font = '11px JetBrains Mono'; ctx.fillStyle = `rgba(200,255,0,${ha})`; ctx.fillText('catch me', q.x + 12, q.y - 10) }
       cv.style.cursor = Math.hypot(q.x - mouse.x, q.y - mouse.y) < 26 ? 'pointer' : ''
     }
@@ -230,7 +235,11 @@ const hero = (() => {
     tstep.textContent = 'caught'
     gsap.timeline()
       .to(hero.st, { m: 1, duration: 4.2, ease: 'sine.inOut' })
-      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 5 })
+      .to(hero.st, { d: 1, duration: 0.5, ease: 'power2.out' })
+      .to(hero.st, { s: Math.PI * 2, duration: 1.3, ease: 'back.inOut(1.4)' }, '+=1.2')
+      .to(hero.st, { d: 0, duration: 0.6, ease: 'power2.in' }, '+=1.6')
+      .add(() => { SPIN = 0 })
+      .to(hero.st, { m: 0, duration: 4.2, ease: 'sine.inOut', delay: 0.3 })
       .add(() => { caught = false; rogue.x = W * (Math.random() < 0.5 ? 0.1 : 0.9) })
   }
   let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(build, 200) })
@@ -238,7 +247,7 @@ const hero = (() => {
   return {
     build, frame,
     setT: v => { t = v }, setScroll: v => { scrollT = v },
-    st: { get m() { return M }, set m(v) { M = v } }, rogue: () => (rogue ? { x: rogue.x, y: rogue.y } : null),
+    st: { get m() { return M }, set m(v) { M = v }, get d() { return DANCE }, set d(v) { DANCE = v }, get s() { return SPIN }, set s(v) { SPIN = v } }, rogue: () => (rogue ? { x: rogue.x, y: rogue.y } : null),
   }
 })()
 
