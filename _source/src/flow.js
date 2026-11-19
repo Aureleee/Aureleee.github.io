@@ -41,6 +41,19 @@ export function initFlow() {
     for (let i = 0; i < N; i++) out.push(pts[Math.floor((i + Math.random() * 0.9) / N * pts.length) % pts.length])
     return out.sort(() => Math.random() - 0.5)
   }
+  // photo sampled on a grid of N cells, brightness → alpha
+  const photoImg = new Image(); photoImg.src = 'photo.jpg'
+  let gcols = 1, grows = 1, gridN = 0, photoAR = 0, photoLum = new Float32Array(0)
+  function samplePhoto(ar) {
+    photoAR = ar; gcols = Math.max(4, Math.round(Math.sqrt(N * ar))); grows = Math.max(4, Math.floor(N / gcols)); gridN = gcols * grows
+    const c = document.createElement('canvas'); c.width = gcols; c.height = grows
+    const g = c.getContext('2d'), iw = photoImg.naturalWidth, ih = photoImg.naturalHeight
+    const s2 = Math.max(gcols / iw, grows / ih), dw = iw * s2, dh = ih * s2
+    g.drawImage(photoImg, (gcols - dw) / 2, (grows - dh) / 2, dw, dh)
+    const d = g.getImageData(0, 0, gcols, grows).data
+    photoLum = new Float32Array(gridN)
+    for (let i = 0; i < gridN; i++) photoLum[i] = (0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2]) / 255
+  }
   size(); addEventListener('resize', size)
 
   const P = Array.from({ length: N }, (_, i) => ({
@@ -51,7 +64,7 @@ export function initFlow() {
 
   const $ = s => document.querySelector(s)
   const els = {
-    hero: $('#particles'), photo: $('.about-photo'), hl: [...document.querySelectorAll('.reveal-words .hl')], about: $('.about'), cards: [...document.querySelectorAll('.proj')],
+    hero: $('#particles'), photo: $('.about-photo'), photoImg: $('.about-photo img'), hl: [...document.querySelectorAll('.reveal-words .hl')], about: $('.about'), cards: [...document.querySelectorAll('.proj')],
     card1: $('canvas[data-kind=tiles]'), dm: $('#dm'), contact: $('.contact'),
   }
   const absTop = el => el.getBoundingClientRect().top + scrollY
@@ -69,23 +82,12 @@ export function initFlow() {
     const st0 = p => { const q = heroT[p.hk % heroT.length]; return [hr.left + q[0], hr.top + q[1]] }
 
     const pr = els.photo.getBoundingClientRect()
-    // About: most points underline "M2 Data Science student at École Polytechnique", flowing along it,
-    // the others stream around the photo frame
-    const lines = []
-    for (const el of els.hl) { const r = el.getBoundingClientRect(), l = lines.find(L => Math.abs(L.b - r.bottom) < 6); l ? (l.x0 = Math.min(l.x0, r.left), l.x1 = Math.max(l.x1, r.right)) : lines.push({ x0: r.left, x1: r.right, b: r.bottom }) }
-    const totalL = lines.reduce((s2, L) => s2 + L.x1 - L.x0, 0) || 1
-    const perim = 2 * (pr.width + pr.height)
+    // About: the points become a subtle dotted version of the photo, laid over it
+    if (photoImg.complete && photoImg.naturalWidth && Math.abs(pr.width / pr.height - photoAR) > 0.01) samplePhoto(pr.width / pr.height)
     const st1 = p => {
-      if (p.r < 0.68 && lines.length) {
-        let d = ((p.u + time * 0.05) % 1) * totalL
-        for (const L of lines) { const w = L.x1 - L.x0; if (d <= w) return [L.x0 + d, L.b + 4 + p.e2 * 1.6 + Math.sin(d * 0.05 + time * 3) * 1.2]; d -= w }
-      }
-      let d = ((p.u + time * 0.025) % 1) * perim, x, yy, off = 14 + Math.abs(p.e1) * 6
-      if (d < pr.width) { x = pr.left + d; yy = pr.top - off }
-      else if ((d -= pr.width) < pr.height) { x = pr.right + off; yy = pr.top + d }
-      else if ((d -= pr.height) < pr.width) { x = pr.right - d; yy = pr.bottom + off }
-      else { d -= pr.width; x = pr.left - off; yy = pr.bottom - d }
-      return [x, yy]
+      if (p.i >= gridN) return [pr.left + p.u * pr.width, pr.top + p.v * pr.height]
+      const ci = p.i % gcols, cj = Math.floor(p.i / gcols)
+      return [pr.left + (ci + 0.5) / gcols * pr.width + Math.sin(time * 0.8 + p.i) * 0.6, pr.top + (cj + 0.5) / grows * pr.height + Math.cos(time * 0.7 + p.i) * 0.6]
     }
 
     // SyncTweedies: synced most of the time, a short burst of noise now and then
@@ -143,6 +145,9 @@ export function initFlow() {
     const e = clamp01((H * 0.95 - dr.top) / (H * 0.6))
     const f = clamp01((H - ctr.top) / (H * 0.55))
     const fadeIn = seg(y, heroH * 0.08, heroH * 0.3)
+    // the photo appears once the points have built it
+    const photoShown = clamp01((a - 0.75) / 0.25)
+    els.photoImg.style.opacity = (0.08 + 0.92 * photoShown).toFixed(3)
     if (fadeIn <= 0) return
 
     for (const p of P) {
@@ -156,6 +161,9 @@ export function initFlow() {
       let x = A[0] + (B[0] - A[0]) * ek + Math.sin(Math.PI * ek) * p.sx * scatter
       let yy = A[1] + (B[1] - A[1]) * ek + Math.sin(Math.PI * ek) * p.sy * scatter * 0.6
       let alpha = fadeIn * (0.55 + 0.45 * p.r)
+      // on the photo: faint dots, brighter where the photo is bright
+      const onPhoto = stage === 1 ? ek : stage === 2 ? 1 - ek : 0
+      if (onPhoto > 0) alpha = alpha * (1 - onPhoto) + onPhoto * fadeIn * (p.i < gridN ? (0.12 + 0.8 * photoLum[p.i] ** 1.3) * (1 - 0.75 * photoShown) : 0)
 
       // on the Thales card the targets jump between cycles: glide instead
       if ((stage === 3 && ek >= 1) || (stage === 4 && ek <= 0)) {
@@ -163,7 +171,10 @@ export function initFlow() {
         const forming = T && T.p > 0.4 && T.p < 0.8, K = forming ? 70 : 6 + 10 * p.r, damp = 2 * Math.sqrt(K) * (forming ? 0.95 : 0.55)
         p.vx += ((x - p.tx) * K - p.vx * damp) * fdt; p.vy += ((yy - p.ty) * K - p.vy * damp) * fdt
         p.tx += p.vx * fdt; p.ty += p.vy * fdt; x = p.tx; yy = p.ty
-        if (T && T.p > 0.66 && T.p < 0.8) alpha *= 0.55
+        if (T) {
+          const gather = Math.max(clamp01((T.p - 0.3) / 0.12) * (1 - clamp01((T.p - 0.78) / 0.14)), 0)
+          alpha *= 0.18 + 0.82 * gather
+        }
       } else { p.tx = x; p.ty = yy; p.vx = 0; p.vy = 0 }
 
       // in the lab: these particles are the noise falling into the latent
