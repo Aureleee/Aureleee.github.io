@@ -22,7 +22,7 @@ const TYPES = {
 // bigger targets, a bit tougher (the cannon fires on its own)
 for (const T of Object.values(TYPES)) { T.r *= 1.7; T.hp *= T.boss ? 1 : 0.9; T.coin = Math.ceil(T.coin * 1.1) }
 // each level: +45% health, +8% speed, +20% damage (like Brotato's per-wave scaling)
-const HPL = l => 1 + 0.75 * (l - 1), SPL = l => 1 + 0.08 * (l - 1), DML = l => 1 + 0.3 * (l - 1)
+const HPL = l => 1 + 0.75 * (l - 1) + 0.18 * (l - 1) ** 2, SPL = l => 1 + 0.08 * (l - 1), DML = l => 1 + 0.3 * (l - 1)
 // [time (s), type, count, extra hp, gap between units]
 const LEVELS = [
   { name: 'warm-up', waves: [[0.5, 'drift', 4], [3, 'drone', 1], [5, 'swarm', 6, 0, 0.25], [8, 'drift', 5], [11, 'zig', 3], [13, 'drone', 1], [15, 'swarm', 8, 0, 0.2]] },
@@ -132,12 +132,12 @@ export function initGame({ lenis }) {
   function startLevel(n) {
     S.level = n; S.phase = 'play'; S.lt = 0
     // from level 3 on, the waves get much bigger: by then the cannon is strong, the noise has to be a flood
-    const flood = n >= 3 ? 1.6 + 0.7 * (n - 3) : 1
+    const flood = n >= 2 ? 2.2 + 1.1 * (n - 2) : 1             // ×2.2, ×3.3, ×4.4, ×5.5
     S.spawnQ = LEVELS[n - 1].waves.flatMap(([t, type, count, extra = 0, gap]) => {
       const big = TYPES[type].boss, c = big ? count : Math.round(count * flood), gp = (gap ?? (big ? 0 : 0.5)) / (big ? 1 : Math.sqrt(flood))
       return Array.from({ length: c }, (_, k) => ({ t: t + k * gp, type, extra }))
     }).sort((a, b) => a.t - b.t)
-    S.trickle = n >= 3 ? 1.3 - 0.25 * (n - 3) : 0; S.trickT = 0
+    S.trickle = n >= 2 ? 0.7 / (1 + 0.6 * (n - 2)) : 0; S.trickT = 0
     panel.classList.remove('on')
     say(`LEVEL ${n}`, LEVELS[n - 1].name)
     updHud()
@@ -208,11 +208,12 @@ export function initGame({ lenis }) {
     panel.classList.add('on')
   }
   function levelCleared() {
+    if (S.level >= 5) { S.phase = 'won'; return win() }       // the last level: no shop, no perk, it's over
     S.phase = 'shop'
     const bonus = 15 * S.level; S.coins += bonus
     updHud()
     const pool = PERKS.filter(p => !S.perks.has(p.id)).sort(() => Math.random() - 0.5).slice(0, 3)
-    if (!pool.length || S.level >= 5) return renderShop(true, bonus)
+    if (!pool.length) return renderShop(true, bonus)
     panel.innerHTML = `<p class="gm-t">level ${S.level} cleared <span>pick a special upgrade</span></p><div class="gm-grid gm-perks">` +
       pool.map(p => `<button class="gm-item gm-perk" data-id="${p.id}"><b>${p.name}</b><span>${p.desc}</span><i>free</i></button>`).join('') + '</div>'
     panel.querySelectorAll('.gm-perk').forEach(b => b.addEventListener('click', () => { S.perks.add(b.dataset.id); renderShop(true, bonus) }))
@@ -256,11 +257,11 @@ export function initGame({ lenis }) {
     for (let k = 0; k < n; k++) {
       const a = base + (n > 1 ? -spread / 2 + spread * k / (n - 1) : 0)
       const v = SPEED[S.stats.vl]
-      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.7 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     if (S.perks.has('twin')) {
       const a = base + Math.PI, v = SPEED[S.stats.vl]
-      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg, bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
+      S.shells.push({ x: C.x + Math.cos(a) * 24, y: C.y + Math.sin(a) * 24, vx: Math.cos(a) * v, vy: Math.sin(a) * v, dmg: S.stats.dmg * (n > 1 ? 0.7 : 1), bounces: S.stats.bounce, pierce: S.stats.pierce, hits: new Set(), life: 12 })
     }
     S.recoil = 1
     S.reload = RATE[S.stats.rl] / (S.perks.has('overclock') ? 1.3 : 1)
@@ -368,7 +369,7 @@ export function initGame({ lenis }) {
         S.lt += dt
         while (S.spawnQ.length && S.spawnQ[0].t <= S.lt) { const q = S.spawnQ.shift(); spawn(q.type, q.extra) }
         // a steady trickle of noise on top of the waves, as long as waves are still coming
-        if (S.trickle && S.spawnQ.length) { S.trickT += dt; if (S.trickT > S.trickle) { S.trickT = 0; spawn(Math.random() < 0.6 ? 'swarm' : 'zig') } }
+        if (S.trickle && S.spawnQ.length) { S.trickT += dt; if (S.trickT > S.trickle) { S.trickT = 0; const r = Math.random(); spawn(r < 0.5 ? 'swarm' : r < 0.8 ? 'zig' : r < 0.93 ? 'drift' : 'tank') } }
         if (!S.spawnQ.length && !S.enemies.length && !S.pend.length) levelCleared()
       }
       // dots gathering where an enemy is about to appear
@@ -447,12 +448,12 @@ export function initGame({ lenis }) {
       }
       S.bolts = S.bolts.filter(b => {
         if (S.perks.has('homing')) {                       // a gentle pull toward the closest enemy ahead
-          let best = null, bd = 260
+          let best = null, bd = 190
           for (const e of S.enemies) { const dd = Math.hypot(e.x - b.x, e.y - b.y); if (dd < bd && (e.x - b.x) * b.vx + (e.y - b.y) * b.vy > 0) { bd = dd; best = e } }
           if (best) {
             const sp = Math.hypot(b.vx, b.vy), a = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x)
             let da = want - a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI
-            const na = a + Math.max(-3.2 * dt, Math.min(3.2 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
+            const na = a + Math.max(-1.9 * dt, Math.min(1.9 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
           }
         }
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt
@@ -476,12 +477,12 @@ export function initGame({ lenis }) {
       const A = arena()
       S.shells = S.shells.filter(b => {
         if (S.perks.has('homing')) {                       // a gentle pull toward the closest enemy ahead
-          let best = null, bd = 260
+          let best = null, bd = 190
           for (const e of S.enemies) { const dd = Math.hypot(e.x - b.x, e.y - b.y); if (dd < bd && (e.x - b.x) * b.vx + (e.y - b.y) * b.vy > 0) { bd = dd; best = e } }
           if (best) {
             const sp = Math.hypot(b.vx, b.vy), a = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x)
             let da = want - a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI
-            const na = a + Math.max(-3.2 * dt, Math.min(3.2 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
+            const na = a + Math.max(-1.9 * dt, Math.min(1.9 * dt, da)); b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp
           }
         }
         b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt
@@ -513,6 +514,10 @@ export function initGame({ lenis }) {
       g.strokeStyle = rl >= 1 ? `rgba(${LIME},.85)` : `rgba(${FG},.5)`; g.beginPath(); g.arc(C.x, C.y, 16, -Math.PI / 2, -Math.PI / 2 + Math.min(1, rl) * Math.PI * 2); g.stroke()
       g.save(); g.translate(C.x, C.y); g.rotate(aim); g.fillStyle = `rgb(${FG})`; g.fillRect(10 - 4 * (S.recoil || 0), -2.5, 16, 5); g.restore()
       g.fillStyle = `rgb(${LIME})`; g.fillRect(C.x - 3, C.y - 3, 6, 6)
+      if (playing && SHOP.some(it => it.id !== 'repair' && it.lvl(S.stats) < it.max && S.coins >= it.cost(it.lvl(S.stats)))) {
+        g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'center'
+        g.fillStyle = `rgba(${LIME},${0.35 + 0.25 * Math.sin(t * 4)})`; g.fillText('press B · shop', C.x, C.y + 68)
+      }
       if (ch > 0) {
         g.strokeStyle = ch >= 1 ? '#fff' : `rgba(${LIME},.9)`; g.lineWidth = 1.5; g.beginPath(); g.arc(C.x, C.y, 26 - 6 * ch, -Math.PI / 2, -Math.PI / 2 + ch * Math.PI * 2); g.stroke()
         const P = trace(C.x, C.y, Math.cos(aim), Math.sin(aim), Math.min(1, S.stats.bounce))
