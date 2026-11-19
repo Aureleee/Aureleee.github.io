@@ -82,23 +82,31 @@ const hero = (() => {
     // free particles wandering around the name
     const band = (lines.length * lh) * 1.4 + H * 0.12
     WB = { y0: y0 - band / 2 - lh * 0.2, h: band + lh * (lines.length - 1) * 0.4 }
-    // easter egg: the same particles can also draw a big X
-    {
-      const xo = document.createElement('canvas'); xo.width = W; xo.height = H
-      const g = xo.getContext('2d'), xs = Math.min(H * 0.62, W * 0.7)
-      g.font = `800 ${xs}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'
-      g.fillText('X', W / 2, H * 0.45)
-      const xd = g.getImageData(0, 0, W, H).data, xt = [], st = Math.max(2, Math.round(Math.sqrt((xs * xs * 0.3) / Math.max(1, targets.length))))
-      for (let y = 0; y < H; y += st) for (let x = 0; x < W; x += st) if (xd[4 * (y * W + x) + 3] > 128) xt.push([x, y])
-      for (let i = xt.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[xt[i], xt[j]] = [xt[j], xt[i]] }
-      P.forEach((p, i) => { const q = xt[i % xt.length]; p.xx = q[0] + (Math.random() - 0.5) * st; p.xy = q[1] + (Math.random() - 0.5) * st; p.d = Math.random() })
-    }
+    computeX(targets.length, y0)
     rogue = { x: W * 0.8, y: y0, vx: 0, vy: 0, trail: [], ph: Math.random() * 10, home: [W / 2, y0], span: [W * 0.42, lh * 1.4] }
     F = Array.from({ length: W < 800 ? 160 : 380 }, () => ({
       x: Math.random() * W, y: WB.y0 + Math.random() * WB.h, s: 1 + Math.random() * 1.6,
       a: 0.18 + Math.random() * 0.45, acc: Math.random() < 0.12, ph: Math.random() * 10,
     }))
   }
+
+  // easter egg: the same particles can also draw the X
+  const xImg = new Image(); xImg.src = 'x-mask.png'
+  let lastN = 0, lastY = 0
+  function computeX(n, yc) {
+    lastN = n; lastY = yc
+    const xo = document.createElement('canvas'); xo.width = W; xo.height = H
+    const g = xo.getContext('2d'), xh = Math.min(H * 0.66, W * 0.85)
+    if (xImg.complete && xImg.naturalWidth) {
+      const xw = xh * xImg.naturalWidth / xImg.naturalHeight
+      g.drawImage(xImg, W / 2 - xw / 2, H * 0.45 - xh / 2, xw, xh)
+    } else { g.font = `800 ${xh}px Syne`; g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('X', W / 2, H * 0.45) }
+    const xd = g.getImageData(0, 0, W, H).data, xt = []
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) if (xd[4 * (y * W + x) + 3] > 128) xt.push([x, y])
+    for (let i = xt.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[xt[i], xt[j]] = [xt[j], xt[i]] }
+    P.forEach((p, i) => { const q = xt[i % xt.length]; p.xx = q[0] + (Math.random() - 0.5) * 2; p.xy = q[1] + (Math.random() - 0.5) * 2; p.d = p.d ?? Math.random() })
+  }
+  xImg.onload = () => { if (P.length) computeX(lastN, lastY) }
 
   function frame() {
     const tt = Math.min(1, t + scrollT)
